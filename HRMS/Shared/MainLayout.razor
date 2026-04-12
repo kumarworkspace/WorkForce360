@@ -1,0 +1,149 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<MainLayout> Logger
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+
+<MudProviderComponent />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Style="    background-color: #F8F9FE;
+    border: none;
+    box-shadow: none;">
+        <MudSpacer />
+        <div class="d-flex align-center mr-4">
+            <MudIconButton Icon="@Icons.Material.Filled.HelpOutline" Class="mr-2" />
+            <MudIconButton Icon="@Icons.Material.Filled.Notifications" Class="mr-2">
+                <MudBadge Content="9" Color="Color.Error" Overlap="true">
+                </MudBadge>
+            </MudIconButton>
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <ActivatorContent>
+                    @if (!string.IsNullOrEmpty(userProfilePicture))
+                    {
+                        <MudAvatar Size="Size.Small" Style="cursor: pointer;">
+                            <MudImage Src="@userProfilePicture" />
+                        </MudAvatar>
+                    }
+                    else
+                    {
+                        <MudAvatar Size="Size.Small" Style="cursor: pointer;">@userInitial</MudAvatar>
+                    }
+                </ActivatorContent>
+                <ChildContent>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Person" Href="/profile">My Profile</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="OpenLogoutDialog">Log Out</MudMenuItem>
+                </ChildContent>
+            </MudMenu>
+        </div>
+    </MudAppBar>
+    <MudDrawerContainer Style="height: 100vh; display:flex; flex-direction:row; background-color:#F8F9FE">
+        <!-- Full-height sidebar -->
+        <NavMenu />
+
+        <!-- Main body content -->
+        <MudMainContent Style="flex:1; overflow-y:auto;">
+            <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+                @Body
+            </MudContainer>
+        </MudMainContent>
+    </MudDrawerContainer>
+</MudLayout>
+
+@code {
+    private const string DefaultInitial = "U";
+    private const string DefaultUserName = "User";
+    private const string OpenIdConnectAuthType = "OpenIdConnect";
+    private const string FederationAuthType = "AuthenticationTypes.Federation";
+    private const string LogoutPath = "/logout";
+
+    private string userInitial = DefaultInitial;
+    private string userProfilePicture = string.Empty;
+    private string userName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+            return;
+
+        Logger.LogInformation("User authenticated - AuthType: {AuthType}", user.Identity.AuthenticationType);
+
+        userName = IsSsoAuthentication(user.Identity.AuthenticationType)
+            ? GetSsoUserName(user)
+            : GetCookieUserName(user);
+
+        SetUserInitial();
+    }
+
+    private bool IsSsoAuthentication(string? authType) =>
+        authType == OpenIdConnectAuthType || authType == FederationAuthType;
+
+    private string GetSsoUserName(ClaimsPrincipal user)
+    {
+        var name = user.FindFirst(ClaimTypes.Name)?.Value
+            ?? user.FindFirst("name")?.Value
+            ?? user.FindFirst(ClaimTypes.Email)?.Value
+            ?? user.FindFirst("preferred_username")?.Value
+            ?? DefaultUserName;
+
+        userProfilePicture = user.FindFirst("picture")?.Value ?? string.Empty;
+        Logger.LogInformation("SSO user - userName: {UserName}", name);
+
+        return name;
+    }
+
+    private string GetCookieUserName(ClaimsPrincipal user)
+    {
+        var name = user.FindFirst("Username")?.Value
+            ?? user.FindFirst(ClaimTypes.Name)?.Value
+            ?? user.FindFirst(ClaimTypes.Email)?.Value
+            ?? user.Identity?.Name
+            ?? DefaultUserName;
+
+        Logger.LogInformation("Cookie auth user - userName: {UserName}", name);
+
+        return name;
+    }
+
+    private void SetUserInitial()
+    {
+        if (string.IsNullOrWhiteSpace(userName))
+        {
+            Logger.LogWarning("userName is null or empty, keeping default initial '{DefaultInitial}'", DefaultInitial);
+            return;
+        }
+
+        userInitial = userName.Trim()[0].ToString().ToUpper();
+        Logger.LogInformation("User initial set: {UserInitial}", userInitial);
+    }
+
+    private async Task OpenLogoutDialog()
+    {
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<LogoutConfirmationDialog>(
+            "Logout Confirmation?",
+            new DialogParameters(),
+            options);
+
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Navigation.NavigateTo(LogoutPath, forceLoad: true);
+        }
+    }
+}
+

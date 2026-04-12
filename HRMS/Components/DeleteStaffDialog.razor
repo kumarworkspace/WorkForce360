@@ -1,0 +1,28 @@
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1">
+            Are you sure you want to delete employee <strong>@StaffName</strong>?
+            <br />
+            <MudText Typo="Typo.body2" Color="Color.Warning" Class="mt-2">
+                This action cannot be undone. The employee will be soft deleted.
+            </MudText>
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Delete">Delete</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public int StaffId { get; set; }
+    [Parameter] public string StaffName { get; set; } = string.Empty;
+
+    void Cancel() => MudDialog?.Cancel();
+
+    void Delete() => MudDialog?.Close(DialogResult.Ok(true));
+}
+

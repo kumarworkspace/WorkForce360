@@ -1,0 +1,274 @@
+@page "/signin"
+@layout BlankLayout
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.OpenIdConnect
+@inject NavigationManager Navigation
+@inject HRMS.Core.Application.Interfaces.IAuthenticationService AuthService
+@inject IConfiguration Configuration
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+
+<MudContainer MaxWidth="MaxWidth.False" Class="d-flex" Style="height: 100vh; overflow: hidden; padding:0;">
+    <!-- Left Section -->
+    <div class="signin-left-container">
+        <MudPaper Elevation="0" Class="signin-left-paper">
+            <!-- SSO Buttons -->
+            <MudStack Spacing="2" Class="mb-3">
+                <MudButton Variant="Variant.Outlined" FullWidth="true" Size="Size.Medium" StartIcon="@Icons.Custom.Brands.Google" Class="signin-sso-button" OnClick="SignInWithGoogle">Continue with Google</MudButton>
+                <MudButton Variant="Variant.Outlined" FullWidth="true" Size="Size.Medium" StartIcon="@Icons.Custom.Brands.Microsoft" Class="signin-sso-button" OnClick="SignInWithMicrosoft">Sign in with Microsoft</MudButton>
+                <MudButton Variant="Variant.Outlined" FullWidth="true" Size="Size.Medium" StartIcon="@Icons.Custom.Brands.Apple" Class="signin-sso-button" OnClick="SignInWithApple">Sign in with Apple</MudButton>
+            </MudStack>
+
+            <!-- OR Divider (inline kept) -->
+            <div class="d-flex align-center my-4" style="width: 100%;">
+                <MudDivider style="width:50%" />
+                <MudText Typo="Typo.body2" Style="padding: 0 12px; color: #597199; white-space: nowrap;">OR</MudText>
+                <MudDivider style="width:50%" />
+            </div>
+
+            <!-- Email/Password Form (inline kept) -->
+            <MudForm @ref="form" @bind-IsValid="@isValid" Style="flex-grow: 1; display: flex; flex-direction: column; justify-content: start;">
+                <MudTextField @bind-Value="email"
+                              Label="Company Email"
+                              Variant="Variant.Outlined"
+                              FullWidth="true"
+                              Placeholder="Enter your company email"
+                              Required="true"
+                              RequiredError="Email is required"
+                              Validation="@(new EmailAddressAttribute() { ErrorMessage = "Invalid email address" })"
+                              Class="mb-3 signin-input-radius" />
+                <MudTextField @bind-Value="password"
+                              Label="Password"
+                              Variant="Variant.Outlined"
+                              FullWidth="true"
+                              Placeholder="Enter your password"
+                              InputType="@passwordInputType"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@passwordIcon"
+                              OnAdornmentClick="TogglePasswordVisibility"
+                              AdornmentAriaLabel="Toggle password visibility"
+                              Required="true"
+                              RequiredError="Password is required"
+                              Class="mb-3 signin-input-radius" />
+                <div class="d-flex justify-space-between align-center mb-4">
+                    <MudCheckBox @bind-Value="rememberMe" Color="Color.Primary">
+                        <MudText Typo="Typo.body2">Remember me</MudText>
+                    </MudCheckBox>
+                    <MudLink Href="/forgot-password" Typo="Typo.body2" Color="Color.Primary">Forgot password?</MudLink>
+                </div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large" Class="signin-primary-button" Disabled="@(!isValid || isLoading)" OnClick="SignInWithEmail">
+                    @if (isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <span>Signing in...</span>
+                    }
+                    else
+                    {
+                        <span>Sign In</span>
+                    }
+                </MudButton>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-3">@errorMessage</MudAlert>
+                }
+            </MudForm>
+
+            <!-- Sign Up (inline kept) -->
+            <div class="d-flex justify-center mt-4">
+                <MudText Typo="Typo.body2" Style="color: #597199;">
+                    Don't have an account?
+                    <MudLink Href="/signup" Typo="Typo.body2" Color="Color.Primary" Style="font-weight: 500;">Sign up</MudLink>
+                </MudText>
+            </div>
+
+            <!-- Terms and Privacy Links -->
+            <div class="d-flex justify-center align-center mt-4" style="gap: 16px;">
+                <MudLink Href="@termsOfServiceUrl" Target="_blank" Typo="Typo.body2" Color="Color.Primary">Terms of Service</MudLink>
+                <MudText Typo="Typo.body2" Style="color: #597199;">|</MudText>
+                <MudLink Href="@privacyPolicyUrl" Target="_blank" Typo="Typo.body2" Color="Color.Primary">Privacy Policy</MudLink>
+            </div>
+
+            <!-- Copyright -->
+            <div class="d-flex justify-center mt-2">
+                <MudText Typo="Typo.body2" Style="color: #597199;">
+                    © @copyrightYear @copyrightCompany
+                </MudText>
+            </div>
+
+            <!-- Compliance Logos (inline kept) -->
+            <div class="d-flex justify-center align-center mt-3" style="gap: 16px;">
+                <MudTooltip Text="SOC 2 Type 2 Certified"><img src="/images/soc2.png" alt="SOC 2" style="height:24px;" /></MudTooltip>
+                <MudTooltip Text="ISO 27001-2013 Certified"><img src="/images/iso27001.png" alt="ISO 27001" style="height:24px;" /></MudTooltip>
+                <MudTooltip Text="GDPR Compliant"><img src="/images/gdpr.png" alt="GDPR" style="height:24px;" /></MudTooltip>
+                <MudTooltip Text="NACSA Compliant"><img src="/images/nacsa.png" alt="NACSA" style="height:24px;" /></MudTooltip>
+            </div>
+        </MudPaper>
+    </div>
+
+    <!-- Right Section -->
+    <div class="signin-right-container">
+    </div>
+</MudContainer>
+
+@code {
+    private MudForm? form;
+    private bool isValid;
+    private bool isLoading;
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private bool rememberMe;
+    private string errorMessage = string.Empty;
+    private List<string> features = new()
+    {
+        "AG IPulse",
+        "AG TMS",
+        "AG Odela",
+        "AG CACTUS"
+    };
+    private IEnumerable<string> loopedFeatures => features.Concat(features);
+    private InputType passwordInputType = InputType.Password;
+    private string passwordIcon = Icons.Material.Filled.VisibilityOff;
+
+    // Configuration values
+    private string copyrightYear = string.Empty;
+    private string copyrightCompany = string.Empty;
+    private string termsOfServiceUrl = string.Empty;
+    private string privacyPolicyUrl = string.Empty;
+    private string policiesLandingPage = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        copyrightYear = Configuration["Copyright:Year"] ?? DateTime.Now.Year.ToString();
+        copyrightCompany = Configuration["Copyright:Company"] ?? "All rights reserved.";
+        termsOfServiceUrl = Configuration["LegalLinks:TermsOfServiceUrl"] ?? "/terms-of-service";
+        privacyPolicyUrl = Configuration["LegalLinks:PrivacyPolicyUrl"] ?? "/privacy-policy";
+        policiesLandingPage = Configuration["Policies:LandingPageUrl"] ?? "/dashboard";
+
+        // Check for error query parameter
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var error = query["error"];
+
+        if (!string.IsNullOrEmpty(error))
+        {
+            errorMessage = error switch
+            {
+                "authentication_failed" => "Authentication failed. Please try again.",
+                "access_denied" => "Access denied. You are not authorized to access this application.",
+                "user_not_found" => "User not found. Please check your email address.",
+                "user_inactive" => "Your account is inactive. Please contact your administrator.",
+                "invalid_tenant" => "Invalid tenant. Please contact your administrator.",
+                "no_role_assigned" => "No role assigned. Please contact your administrator to assign a role.",
+                "email_not_verified" => "Email not verified. Please check your email and verify your account before signing in.",
+                "login_failed" => "Login failed. Please try again.",
+                _ => "An error occurred during sign in."
+            };
+        }
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        if (passwordInputType == InputType.Password)
+        {
+            passwordInputType = InputType.Text;
+            passwordIcon = Icons.Material.Filled.Visibility;
+        }
+        else
+        {
+            passwordInputType = InputType.Password;
+            passwordIcon = Icons.Material.Filled.VisibilityOff;
+        }
+    }
+
+    private async Task SignInWithEmail()
+    {
+        errorMessage = string.Empty;
+        isLoading = true;
+
+        try
+        {
+            var result = await AuthService.SignInWithEmailAsync(email, password, rememberMe);
+
+            if (result.Success)
+            {
+                // Redirect to login handler page which will create the authentication cookie
+                Navigation.NavigateTo($"/login-handler?email={Uri.EscapeDataString(email)}&rememberMe={rememberMe}", forceLoad: true);
+            }
+            else
+            {
+                errorMessage = result.Message ?? "Sign in failed. Please check your credentials.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SignInWithGoogle()
+    {
+        errorMessage = string.Empty;
+        isLoading = true;
+
+        try
+        {
+            var result = await AuthService.SignInWithGoogleAsync();
+
+            if (result.Success)
+            {
+                Navigation.NavigateTo("/");
+            }
+            else
+            {
+                errorMessage = result.Message ?? "Google sign in failed.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void SignInWithMicrosoft()
+    {
+        // Redirect to login page which triggers Microsoft OIDC authentication
+        var returnUrl = policiesLandingPage; // Redirect to dashboard after successful login
+        Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+    }
+
+    private async Task SignInWithApple()
+    {
+        errorMessage = string.Empty;
+        isLoading = true;
+
+        try
+        {
+            var result = await AuthService.SignInWithAppleAsync();
+
+            if (result.Success)
+            {
+                Navigation.NavigateTo("/");
+            }
+            else
+            {
+                errorMessage = result.Message ?? "Apple sign in failed.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

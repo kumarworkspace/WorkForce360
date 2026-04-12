@@ -1,0 +1,806 @@
+@page "/hrms/leave/request"
+@page "/hrms/leave/edit/{RequestId:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILeaveOtService LeaveOtService
+@inject IStaffService StaffService
+@inject IMasterDropdownService MasterDropdownService
+@inject ILeaveTypeMasterService LeaveTypeMasterService
+@inject ILeaveBalanceService LeaveBalanceService
+@inject IUserService UserService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<LeaveOtRequest> Logger
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IFileStorageService FileStorageService
+
+<PageTitle>@(_isEditMode ? "Edit Leave Request" : "Leave Request")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            @if (_isEditMode)
+            {
+                <div class="d-flex align-center" style="gap: 8px;">
+                    <MudIcon Icon="@Icons.Material.Filled.EditNote" Style="color: #1565c0; font-size: 32px;" />
+                    <div>
+                        <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1565c0; margin-bottom: 2px;">Edit Leave Request</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Modify your pending leave request</MudText>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Leave Request</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Submit your leave request</MudText>
+            }
+        </div>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="NavigateBack">
+            Back
+        </MudButton>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="int" Value="@_request.RequestTypeId"
+                                  ValueChanged="@OnRequestTypeChanged"
+                                  Label="Request Type *"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  RequiredError="Request type is required"
+                                  FullWidth="@true">
+                            <MudSelectItem T="int" Value="0" Disabled="true">-- Select Request Type --</MudSelectItem>
+                            @foreach (var requestType in _requestTypes)
+                            {
+                                <MudSelectItem T="int" Value="@requestType.Id">@requestType.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="int?" Value="@_request.LeaveTypeId"
+                                  ValueChanged="OnLeaveTypeChanged"
+                                  Label="Leave Type"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="@true">
+                            @if (!_leaveTypes.Any())
+                            {
+                                <MudSelectItem T="int?" Value="@((int?)null)" Disabled="true">No leave types available</MudSelectItem>
+                            }
+                            else
+                            {
+                                @foreach (var leaveType in _leaveTypes)
+                                {
+                                    <MudSelectItem T="int?" Value="@((int?)leaveType.LeaveTypeId)">@leaveType.LeaveTypeName</MudSelectItem>
+                                }
+                            }
+                        </MudSelect>
+                        @if (!_leaveTypes.Any())
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning" Class="mt-1">
+                                Please add leave types in Master Dropdown with category 'leavetype'
+                            </MudText>
+                        }
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker Date="@_fromDate"
+                                      DateChanged="OnFromDateChanged"
+                                      Label="From Date *"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      MinDate="@DateTime.Today"
+                                      FullWidth="@true" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker Date="@_toDate"
+                                      DateChanged="OnToDateChanged"
+                                      Label="To Date *"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      MinDate="@_fromDate"
+                                      FullWidth="@true" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="@_totalDaysDisplay"
+                                     Label="Total Days"
+                                     Variant="Variant.Outlined"
+                                     FullWidth="@true"
+                                     Disabled="true"
+                                     HelperText="Auto-calculated (excludes weekends and holidays)" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="@_totalHoursDisplay"
+                                     Label="Total Hours"
+                                     Variant="Variant.Outlined"
+                                     FullWidth="@true"
+                                     Disabled="true"
+                                     HelperText="Auto-calculated for OT requests" />
+                    </MudItem>
+
+                    @if (_request.LeaveTypeId.HasValue && _showLeaveBalance)
+                    {
+                        <MudItem xs="12">
+                            <MudPaper Elevation="1" Class="pa-3" Style="background: #f5f5f5; border-radius: 4px;">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight: 600; margin-bottom: 8px;">Leave Balance</MudText>
+                                <MudGrid>
+                                    <MudItem xs="12" md="4">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Balance</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@_leaveBalanceTotal.ToString("F1") days</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Used (Approved)</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600; color: #f57c00;">@_leaveBalanceUsed.ToString("F1") days</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Pending</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600; color: #1976d2;">@_leaveBalancePending.ToString("F1") days</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Remaining</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600; color: #388e3c;">@_leaveBalanceRemaining.ToString("F1") days</MudText>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        </MudItem>
+                    }
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField Value="@_reportingManagerName"
+                                     Label="Reporting Manager *"
+                                     Variant="Variant.Outlined"
+                                     Disabled="true"
+                                     FullWidth="@true"
+                                     HelperText="Auto-loaded from your staff record" />
+                        @if (_request.ReportingManagerId == null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning" Class="mt-1">
+                                Reporting manager not found in your staff record. Please contact HR.
+                            </MudText>
+                        }
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="@_request.Reason"
+                                     Label="Reason *"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Reason is required"
+                                     Lines="3"
+                                     FullWidth="@true" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            Attachment @(_isSickLeave ? "* (Required for Sick Leave)" : "(Optional)")
+                        </MudText>
+                        <InputFile OnChange="HandleAttachmentSelected"
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  class="d-none"
+                                  id="attachmentInput" />
+                        <MudButton HtmlTag="label"
+                                  Variant="Variant.Outlined"
+                                  Color="Color.Primary"
+                                  StartIcon="@Icons.Material.Filled.AttachFile"
+                                  for="attachmentInput"
+                                  FullWidth="@true">
+                            @(_selectedAttachment != null ? $"Selected: {_selectedAttachment.Name}" : "Select Attachment")
+                        </MudButton>
+                        @if (_isSickLeave && _selectedAttachment == null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Error" Class="mt-1">
+                                Attachment is required for Sick Leave
+                            </MudText>
+                        }
+                        @if (_selectedAttachment != null)
+                        {
+                            <MudText Typo="Typo.caption" Class="mt-1">
+                                @_selectedAttachment.Name (@(_selectedAttachment.Size / 1024) KB)
+                            </MudText>
+                        }
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudCheckBox T="bool" @bind-Value="@_request.HRApprovalRequired" Color="Color.Primary">
+                            <MudText Typo="Typo.body2">HR Approval Required</MudText>
+                        </MudCheckBox>
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <div class="d-flex justify-end gap-2 mt-4">
+                            <MudButton Variant="Variant.Text" OnClick="NavigateBack">Cancel</MudButton>
+                            <MudButton Variant="Variant.Filled"
+                                     Color="Color.Primary"
+                                     Disabled="@(!isValid || _isSaving)"
+                                     OnClick="SubmitRequest">
+                                @if (_isSaving)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>@(_isEditMode ? "Saving..." : "Submitting...")</span>
+                                }
+                                else
+                                {
+                                    <span>@(_isEditMode ? "Save Changes" : "Submit Request")</span>
+                                }
+                            </MudButton>
+                        </div>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudForm>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int RequestId { get; set; }
+
+    private MudForm? form;
+    private bool isValid;
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private bool _isEditMode = false;
+    private int _tenantId;
+    private int _userId;
+    private int? _staffId;
+
+    private CreateLeaveOtRequestDto _request = new();
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private string _totalDaysDisplay = string.Empty;
+    private string _totalHoursDisplay = string.Empty;
+
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _requestTypes = new();
+    private List<LeaveTypeMasterDto> _leaveTypes = new();
+    private List<StaffListDto> _reportingManagers = new();
+    private string _reportingManagerName = string.Empty;
+    private bool _showLeaveBalance = false;
+    private decimal _leaveBalanceTotal = 0;
+    private decimal _leaveBalanceUsed = 0;
+    private decimal _leaveBalancePending = 0;
+    private decimal _leaveBalanceRemaining = 0;
+
+    // Attachment fields
+    private IBrowserFile? _selectedAttachment;
+    private bool _isSickLeave = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _isEditMode = RequestId > 0;
+
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                Navigation.NavigateTo("/dashboard");
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+
+            // Get user's staff ID
+            var userEntity = await UserService.GetByIdAsync(_userId, _tenantId);
+            if (userEntity != null && userEntity.StaffId.HasValue)
+            {
+                _staffId = userEntity.StaffId.Value;
+                _request.StaffId = _staffId.Value;
+
+                // Auto-load Reporting Manager from staff record
+                var staffRecord = await StaffService.GetByIdAsync(_staffId.Value, _tenantId);
+                if (staffRecord != null && staffRecord.ReportingManagerId.HasValue)
+                {
+                    _request.ReportingManagerId = staffRecord.ReportingManagerId.Value;
+                    var manager = _reportingManagers.FirstOrDefault(m => m.StaffId == staffRecord.ReportingManagerId.Value);
+                    if (manager != null)
+                    {
+                        _reportingManagerName = $"{manager.Name} ({manager.EmployeeCode})";
+                    }
+                }
+                else
+                {
+                    _reportingManagerName = "Not assigned";
+                }
+            }
+            else
+            {
+                Snackbar.Add("Staff record not found. Please contact your administrator.", Severity.Error);
+                Navigation.NavigateTo("/dashboard");
+                return;
+            }
+
+            await LoadDropdownsAsync();
+
+            // If editing, load the existing request and populate the form
+            if (_isEditMode)
+            {
+                var existing = await LeaveOtService.GetByIdAsync(RequestId, _tenantId);
+                if (existing == null)
+                {
+                    Snackbar.Add("Leave request not found.", Severity.Error);
+                    Navigation.NavigateTo("/hrms/leave");
+                    return;
+                }
+                if (existing.LeaveStatusName?.ToUpper() != "PENDING")
+                {
+                    Snackbar.Add("Only pending requests can be edited.", Severity.Warning);
+                    Navigation.NavigateTo("/hrms/leave");
+                    return;
+                }
+
+                _request.RequestTypeId = existing.RequestTypeId;
+                _request.LeaveTypeId = existing.LeaveTypeId;
+                _request.StaffId = existing.StaffId;
+                _request.Reason = existing.Reason;
+                _request.ReportingManagerId = existing.ReportingManagerId;
+                _request.HRApprovalRequired = existing.HRApprovalRequired;
+                _request.Attachment = existing.Attachment;
+                _fromDate = existing.FromDate;
+                _toDate = existing.ToDate;
+                _request.FromDate = existing.FromDate;
+                _request.ToDate = existing.ToDate;
+                _request.TotalDays = existing.TotalDays;
+                _request.TotalHours = existing.TotalHours;
+                _totalDaysDisplay = existing.TotalDays.HasValue ? existing.TotalDays.Value.ToString("F2") : string.Empty;
+                _totalHoursDisplay = existing.TotalHours.HasValue ? existing.TotalHours.Value.ToString("F2") : string.Empty;
+
+                if (existing.ReportingManagerId.HasValue)
+                {
+                    var mgr = _reportingManagers.FirstOrDefault(m => m.StaffId == existing.ReportingManagerId.Value);
+                    if (mgr != null) _reportingManagerName = $"{mgr.Name} ({mgr.EmployeeCode})";
+                }
+
+                if (existing.LeaveTypeId.HasValue)
+                {
+                    var lt = _leaveTypes.FirstOrDefault(l => l.LeaveTypeId == existing.LeaveTypeId.Value);
+                    _isSickLeave = lt?.LeaveTypeName?.ToUpper().Contains("SICK") ?? false;
+                    await LoadLeaveBalanceAsync();
+                }
+            }
+            else if (_request.LeaveTypeId.HasValue && _request.RequestTypeId != 2)
+            {
+                await LoadLeaveBalanceAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Leave/OT Request page");
+            Snackbar.Add("Error loading page. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadDropdownsAsync()
+    {
+        try
+        {
+            // Load request types
+            try
+            {
+                var requestTypes = await MasterDropdownService.GetByCategoryAsync("RequestType", _tenantId);
+                _requestTypes = requestTypes?.ToList() ?? new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+                Logger.LogInformation("Loaded {Count} request types for tenant {TenantId}", _requestTypes.Count, _tenantId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading request types for tenant {TenantId}", _tenantId);
+                _requestTypes = new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+                Snackbar.Add("Error loading request types. Please contact administrator.", Severity.Warning);
+            }
+
+            // Set default request type to "Leave" if not already set
+            if (_request.RequestTypeId == 0 && _requestTypes.Any())
+            {
+                var leaveRequestType = _requestTypes.FirstOrDefault(rt =>
+                    rt.Name?.ToLower() == "leave" || rt.Code?.ToLower() == "leave");
+                if (leaveRequestType != null)
+                {
+                    _request.RequestTypeId = leaveRequestType.Id;
+                }
+            }
+
+            // Load leave types from LeaveTypeMaster table
+            try
+            {
+                var leaveTypes = await LeaveTypeMasterService.GetByTenantIdAsync(_tenantId);
+                _leaveTypes = leaveTypes?.ToList() ?? new List<LeaveTypeMasterDto>();
+                Logger.LogInformation("Loaded {Count} leave types for tenant {TenantId}", _leaveTypes.Count, _tenantId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading leave types for tenant {TenantId}", _tenantId);
+                _leaveTypes = new List<LeaveTypeMasterDto>();
+                Snackbar.Add("Error loading leave types. Please contact administrator.", Severity.Warning);
+            }
+
+            // Load reporting managers - get all staff and filter
+            try
+            {
+                var allStaffResult = await StaffService.GetPagedAsync(_tenantId, 1, 1000, null, null, null);
+                _reportingManagers = allStaffResult.Items
+                    .Where(s => s.IsActive && s.StaffId != _staffId)
+                    .ToList();
+                Logger.LogInformation("Loaded {Count} reporting managers for tenant {TenantId}", _reportingManagers.Count, _tenantId);
+                
+                // Set manager name if already loaded
+                if (_request.ReportingManagerId.HasValue)
+                {
+                    var manager = _reportingManagers.FirstOrDefault(m => m.StaffId == _request.ReportingManagerId.Value);
+                    if (manager != null)
+                    {
+                        _reportingManagerName = $"{manager.Name} ({manager.EmployeeCode})";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading reporting managers for tenant {TenantId}", _tenantId);
+                _reportingManagers = new List<StaffListDto>();
+                Snackbar.Add("Error loading reporting managers. Please contact administrator.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading dropdowns: {ExceptionMessage}, InnerException: {InnerException}", 
+                ex.Message, ex.InnerException?.Message);
+            Snackbar.Add($"Error loading dropdowns: {ex.InnerException?.Message ?? ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnFromDateChanged(DateTime? date)
+    {
+        _fromDate = date;
+        if (date.HasValue)
+        {
+            _request.FromDate = date.Value;
+            await CalculateDaysAndHours();
+        }
+        else
+        {
+            _request.FromDate = DateTime.Today;
+            await CalculateDaysAndHours();
+        }
+    }
+
+    private async Task OnToDateChanged(DateTime? date)
+    {
+        _toDate = date;
+        if (date.HasValue)
+        {
+            _request.ToDate = date.Value;
+            await CalculateDaysAndHours();
+        }
+        else
+        {
+            _request.ToDate = DateTime.Today;
+            await CalculateDaysAndHours();
+        }
+    }
+
+    private async Task CalculateDaysAndHours()
+    {
+        if (_fromDate.HasValue && _toDate.HasValue && _fromDate <= _toDate)
+        {
+            try
+            {
+                if (_request.RequestTypeId == 2) // OT
+                {
+                    // Calculate OT hours
+                    var hours = await LeaveOtService.CalculateOTHoursAsync(_fromDate.Value, _toDate.Value);
+                    _request.TotalHours = hours;
+                    _request.TotalDays = null;
+                    _totalHoursDisplay = hours.ToString("F2");
+                    _totalDaysDisplay = string.Empty;
+                }
+                else
+                {
+                    // Default: Calculate leave days (for Leave or when RequestType not selected)
+                    var days = await LeaveOtService.CalculateLeaveDaysAsync(_fromDate.Value, _toDate.Value, _tenantId);
+                    _request.TotalDays = days;
+                    _request.TotalHours = null;
+                    _totalDaysDisplay = days.ToString("F2");
+                    _totalHoursDisplay = string.Empty;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error calculating days/hours");
+                Snackbar.Add("Error calculating days/hours. Please try again.", Severity.Warning);
+            }
+        }
+        else
+        {
+            // Clear display if dates are invalid
+            _totalDaysDisplay = string.Empty;
+            _totalHoursDisplay = string.Empty;
+            _request.TotalDays = null;
+            _request.TotalHours = null;
+        }
+    }
+
+    private async Task OnRequestTypeChanged(int value)
+    {
+        _request.RequestTypeId = value;
+        // Recalculate days/hours when request type changes
+        await CalculateDaysAndHours();
+        // Update leave balance display if it's a leave request
+        if (_request.LeaveTypeId.HasValue && value != 2) // Not OT
+        {
+            await LoadLeaveBalanceAsync();
+        }
+        else
+        {
+            _showLeaveBalance = false;
+        }
+        StateHasChanged();
+    }
+    
+    private async Task OnLeaveTypeChanged(int? value)
+    {
+        _request.LeaveTypeId = value;
+
+        // Check if selected leave type is Sick Leave
+        if (value.HasValue)
+        {
+            var leaveType = _leaveTypes.FirstOrDefault(lt => lt.LeaveTypeId == value.Value);
+            _isSickLeave = leaveType?.LeaveTypeName?.ToUpper().Contains("SICK") ?? false;
+        }
+        else
+        {
+            _isSickLeave = false;
+        }
+
+        if (value.HasValue && _request.RequestTypeId != 2) // Not OT
+        {
+            await LoadLeaveBalanceAsync();
+        }
+        else
+        {
+            _showLeaveBalance = false;
+        }
+        StateHasChanged();
+    }
+    
+    private async Task LoadLeaveBalanceAsync()
+    {
+        if (!_staffId.HasValue || !_request.LeaveTypeId.HasValue || _request.RequestTypeId == 2)
+        {
+            _showLeaveBalance = false;
+            return;
+        }
+
+        try
+        {
+            var currentYear = DateTime.Now.Year;
+
+            // Get total balance from LeaveBalance table
+            var leaveBalances = await LeaveBalanceService.GetByStaffIdAsync(_staffId.Value, _tenantId, currentYear);
+            var balance = leaveBalances.FirstOrDefault(b => b.LeaveTypeId == _request.LeaveTypeId.Value);
+            _leaveBalanceTotal = balance?.TotalDays ?? 0;
+
+            // Calculate used and pending days dynamically from actual leave requests
+            var allRequests = await LeaveOtService.GetByStaffIdAsync(_staffId.Value, _tenantId);
+            var relevantRequests = allRequests
+                .Where(r => r.LeaveTypeId == _request.LeaveTypeId.Value
+                         && (r.FromDate.Year == currentYear || r.ToDate.Year == currentYear))
+                .ToList();
+
+            _leaveBalanceUsed = relevantRequests
+                .Where(r => r.LeaveStatusName?.ToUpper() == "APPROVED")
+                .Sum(r => r.TotalDays ?? 0);
+
+            _leaveBalancePending = relevantRequests
+                .Where(r => r.LeaveStatusName?.ToUpper() == "PENDING")
+                .Sum(r => r.TotalDays ?? 0);
+
+            _leaveBalanceRemaining = _leaveBalanceTotal - _leaveBalanceUsed - _leaveBalancePending;
+            _showLeaveBalance = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading leave balance");
+            _showLeaveBalance = false;
+        }
+    }
+
+    private async Task SubmitRequest()
+    {
+        if (!isValid)
+        {
+            Snackbar.Add("Please fill in all required fields correctly.", Severity.Warning);
+            return;
+        }
+
+        if (!_fromDate.HasValue || !_toDate.HasValue)
+        {
+            Snackbar.Add("Please select valid dates.", Severity.Warning);
+            return;
+        }
+
+        if (_fromDate > _toDate)
+        {
+            Snackbar.Add("From date cannot be after to date.", Severity.Warning);
+            return;
+        }
+
+        if (_request.RequestTypeId == 0)
+        {
+            Snackbar.Add("Please select a request type.", Severity.Warning);
+            return;
+        }
+
+        if (!_request.ReportingManagerId.HasValue)
+        {
+            Snackbar.Add("Reporting manager is required. Please contact HR if not assigned.", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_request.Reason))
+        {
+            Snackbar.Add("Reason is required.", Severity.Warning);
+            return;
+        }
+
+        // Validate sick leave attachment
+        if (_isSickLeave && _selectedAttachment == null)
+        {
+            Snackbar.Add("Attachment is required for Sick Leave", Severity.Warning);
+            return;
+        }
+
+        _request.FromDate = _fromDate.Value;
+        _request.ToDate = _toDate.Value;
+
+        try
+        {
+            _isSaving = true;
+            var ipAddress = HttpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+
+            int savedRequestId;
+
+            if (_isEditMode)
+            {
+                // Update existing request
+                var updateDto = new UpdateLeaveOtRequestDto
+                {
+                    RequestId = RequestId,
+                    StaffId = _request.StaffId,
+                    RequestTypeId = _request.RequestTypeId,
+                    LeaveTypeId = _request.LeaveTypeId,
+                    FromDate = _request.FromDate,
+                    ToDate = _request.ToDate,
+                    TotalDays = _request.TotalDays,
+                    TotalHours = _request.TotalHours,
+                    Reason = _request.Reason,
+                    ReportingManagerId = _request.ReportingManagerId,
+                    HRApprovalRequired = _request.HRApprovalRequired,
+                    Attachment = _request.Attachment
+                };
+                await LeaveOtService.UpdateRequestAsync(updateDto, _tenantId, _userId, ipAddress);
+                savedRequestId = RequestId;
+            }
+            else
+            {
+                var result = await LeaveOtService.CreateRequestAsync(_request, _tenantId, _userId, ipAddress);
+                savedRequestId = result.RequestId;
+            }
+
+            // Upload attachment if provided
+            if (_selectedAttachment != null && _staffId.HasValue)
+            {
+                try
+                {
+                    using var stream = _selectedAttachment.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                    var attachmentPath = await FileStorageService.SaveLeaveAttachmentAsync(
+                        _tenantId, _staffId.Value, savedRequestId, stream, _selectedAttachment.Name);
+
+                    var updateDto = new UpdateLeaveOtRequestDto
+                    {
+                        RequestId = savedRequestId,
+                        StaffId = _request.StaffId,
+                        RequestTypeId = _request.RequestTypeId,
+                        LeaveTypeId = _request.LeaveTypeId,
+                        FromDate = _request.FromDate,
+                        ToDate = _request.ToDate,
+                        TotalDays = _request.TotalDays,
+                        TotalHours = _request.TotalHours,
+                        Reason = _request.Reason,
+                        ReportingManagerId = _request.ReportingManagerId,
+                        HRApprovalRequired = _request.HRApprovalRequired,
+                        Attachment = attachmentPath
+                    };
+                    await LeaveOtService.UpdateRequestAsync(updateDto, _tenantId, _userId, ipAddress);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error uploading attachment");
+                    Snackbar.Add(_isEditMode ? "Request updated but attachment upload failed." : "Leave request created but attachment upload failed. Please edit the request to add the attachment.", Severity.Warning);
+                }
+            }
+
+            Snackbar.Add(_isEditMode ? "Leave request updated successfully!" : "Leave request submitted successfully!", Severity.Success);
+            await Task.Delay(500);
+            Navigation.NavigateTo("/hrms/leave");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogWarning(ex, "Validation error submitting Leave/OT request: {Message}", ex.Message);
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error submitting Leave/OT request: {ExceptionMessage}, InnerException: {InnerException}", 
+                ex.Message, ex.InnerException?.Message);
+            var errorMessage = ex.InnerException != null 
+                ? $"Error submitting request: {ex.InnerException.Message}" 
+                : $"Error submitting request: {ex.Message}";
+            Snackbar.Add(errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/hrms/leave");
+    }
+
+    private void HandleAttachmentSelected(InputFileChangeEventArgs e)
+    {
+        if (e.File != null)
+        {
+            // Validate file size (5MB max)
+            const long maxFileSize = 5 * 1024 * 1024;
+            if (e.File.Size > maxFileSize)
+            {
+                Snackbar.Add("File size must be less than 5MB", Severity.Warning);
+                return;
+            }
+
+            // Validate file extension
+            var ext = Path.GetExtension(e.File.Name).ToLowerInvariant();
+            var allowedExtensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" };
+            if (!allowedExtensions.Contains(ext))
+            {
+                Snackbar.Add("Only PDF, JPG, and PNG files are allowed", Severity.Warning);
+                return;
+            }
+
+            _selectedAttachment = e.File;
+            StateHasChanged();
+        }
+    }
+}
+

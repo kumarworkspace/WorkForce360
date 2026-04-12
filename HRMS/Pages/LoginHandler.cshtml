@@ -1,0 +1,118 @@
+@page "/login-handler"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.Extensions.Logging
+@inject HRMS.Core.Domain.Interfaces.IUserRepository UserRepository
+@inject HRMS.Core.Domain.Interfaces.IUserRoleRepository UserRoleRepository
+@inject HRMS.Core.Application.Interfaces.ITenantValidationService TenantValidationService
+@inject ILogger<HRMS.Core.Domain.Interfaces.IUserRepository> Logger
+@{
+    const string DashboardPath = "/dashboard";
+    const string SignInPath = "/signin";
+    const int RememberMeDays = 7;
+    const int DefaultExpirationHours = 8;
+
+    var email = HttpContext.Request.Query["email"].ToString();
+    var rememberMe = HttpContext.Request.Query["rememberMe"].ToString() == "true";
+
+    if (string.IsNullOrEmpty(email))
+    {
+        Response.Redirect(SignInPath);
+        return;
+    }
+
+    try
+    {
+        var user = await UserRepository.GetByEmailAsync(email);
+
+        if (user == null)
+        {
+            Logger.LogWarning("Login handler: User not found for email: {Email}", email);
+            Response.Redirect($"{SignInPath}?error=user_not_found");
+            return;
+        }
+
+        // Validate user is active
+        if (!user.IsActive)
+        {
+            Logger.LogWarning("Login handler: Inactive user attempted login: {Email}", email);
+            Response.Redirect($"{SignInPath}?error=user_inactive");
+            return;
+        }
+
+        // Validate email is verified
+        if (!user.IsEmailVerified)
+        {
+            Logger.LogWarning("Login handler: Unverified email attempted login: {Email}", email);
+            Response.Redirect($"{SignInPath}?error=email_not_verified");
+            return;
+        }
+
+        // Validate TenantId exists
+        if (user.TenantId <= 0)
+        {
+            Logger.LogWarning("Login handler: User without TenantId attempted login: {Email}", email);
+            Response.Redirect($"{SignInPath}?error=invalid_tenant");
+            return;
+        }
+
+        // Validate TenantId is valid and active using TenantValidationService
+        if (!await TenantValidationService.IsValidTenantAsync(user.TenantId))
+        {
+            Logger.LogWarning("Login handler: Invalid or inactive tenant attempted login: {Email}, TenantId: {TenantId}", email, user.TenantId);
+            Response.Redirect($"{SignInPath}?error=invalid_tenant");
+            return;
+        }
+
+        // Validate user has a role assigned (check UserRoles table)
+        var userRoles = await UserRoleRepository.GetByUserIdAsync(user.UserId, user.TenantId);
+        if (!userRoles.Any(ur => ur.IsActive))
+        {
+            Logger.LogWarning("Login handler: User without active role mapping attempted login: {Email}, UserId: {UserId}", email, user.UserId);
+            Response.Redirect($"{SignInPath}?error=no_role_assigned");
+            return;
+        }
+
+        // Validate user has a role name (fallback check)
+        if (string.IsNullOrEmpty(user.Role))
+        {
+            Logger.LogWarning("Login handler: User without role name attempted login: {Email}", email);
+            Response.Redirect($"{SignInPath}?error=no_role_assigned");
+            return;
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Name, user.FullName),
+            new("FullName", user.FullName),
+            new("UserId", user.UserId.ToString()), // Add UserId claim for easier access
+            new("TenantId", user.TenantId.ToString()),
+            new(ClaimTypes.Role, user.Role)
+        };
+
+        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var authProperties = new AuthenticationProperties
+        {
+            IsPersistent = rememberMe,
+            ExpiresUtc = rememberMe
+                ? DateTimeOffset.UtcNow.AddDays(RememberMeDays)
+                : DateTimeOffset.UtcNow.AddHours(DefaultExpirationHours)
+        };
+
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            new ClaimsPrincipal(claimsIdentity),
+            authProperties);
+
+        Logger.LogInformation("User logged in successfully: {Email}, TenantId: {TenantId}", email, user.TenantId);
+        Response.Redirect(DashboardPath);
+    }
+    catch (Exception ex)
+    {
+        Logger.LogError(ex, "Login handler error for email: {Email}", email);
+        Response.Redirect($"{SignInPath}?error=login_failed");
+    }
+}

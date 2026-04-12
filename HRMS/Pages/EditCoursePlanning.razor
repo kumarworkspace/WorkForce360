@@ -1,0 +1,448 @@
+@page "/tms/planning/edit/{Id:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICoursePlanningService CoursePlanningService
+@inject ICourseRegistrationService CourseService
+@inject IStaffService StaffService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<EditCoursePlanning> Logger
+
+<PageTitle>Edit Course Plan</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+    @if (_isLoading)
+    {
+        <div class="d-flex justify-center align-center" style="height: 400px;">
+            <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+        </div>
+    }
+    else
+    {
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudPaper Elevation="2" Class="pa-6" Style="border-radius: 12px;">
+                <div class="mb-4">
+                    <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e;">Edit Course Plan</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Update course planning details</MudText>
+                </div>
+
+                <MudGrid Spacing="3">
+                    <!-- Course -->
+                    <MudItem xs="12">
+                        <MudSelect @bind-Value="_model.CourseId"
+                                  Label="Course *"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  FullWidth="@true"
+                                  T="int">
+                            <MudSelectItem T="int" Value="0" Disabled="true">-- Select Course --</MudSelectItem>
+                            @foreach (var course in _courses)
+                            {
+                                <MudSelectItem Value="@course.CourseId">@course.Title (@course.Code)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <!-- Start Date -->
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker Date="_startDate"
+                                      Label="Start Date *"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      MinDate="@DateTime.Today"
+                                      DateChanged="@OnStartDateChanged"
+                                      FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- Start Time -->
+                    <MudItem xs="12" md="6">
+                        <MudTimePicker Time="_startTime"
+                                      Label="Start Time *"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      TimeChanged="@OnStartTimeChanged"
+                                      FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- End Date -->
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker Date="_endDate"
+                                      Label="End Date *"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      MinDate="@(_startDate ?? DateTime.Today)"
+                                      DateChanged="@OnEndDateChanged"
+                                      FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- End Time -->
+                    <MudItem xs="12" md="6">
+                        <MudTimePicker Time="_endTime"
+                                      Label="End Time *"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      TimeChanged="@OnEndTimeChanged"
+                                      FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- Validation Message -->
+                    @if (!string.IsNullOrEmpty(_dateTimeValidationMessage))
+                    {
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Warning" Dense="true">@_dateTimeValidationMessage</MudAlert>
+                        </MudItem>
+                    }
+
+                    <!-- Venue -->
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Venue"
+                                     Label="Venue *"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Venue is required"
+                                     FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- Trainer -->
+                    <MudItem xs="12">
+                        <MudSelect Value="_model.TrainerId"
+                                  Label="Trainer *"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  ValueChanged="@OnTrainerChanged"
+                                  FullWidth="@true"
+                                  T="int">
+                            <MudSelectItem T="int" Value="0" Disabled="true">-- Select Trainer --</MudSelectItem>
+                            @foreach (var trainer in _trainers)
+                            {
+                                <MudSelectItem Value="@trainer.StaffId">@trainer.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <!-- Conflict Warning -->
+                    @if (_hasConflict)
+                    {
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Error" Dense="true">
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@_conflictMessage</MudText>
+                                @if (_conflictingSchedules.Any())
+                                {
+                                    <MudText Typo="Typo.caption" Class="mt-2">Conflicting Schedules:</MudText>
+                                    @foreach (var conflict in _conflictingSchedules)
+                                    {
+                                        <MudText Typo="Typo.caption" Style="margin-left: 16px;">
+                                            • @conflict.CourseTitle - @conflict.StartDate.ToString("dd MMM yyyy") @conflict.StartTime.ToString(@"hh\:mm") to @conflict.EndDate.ToString("dd MMM yyyy") @conflict.EndTime.ToString(@"hh\:mm")
+                                        </MudText>
+                                    }
+                                }
+                            </MudAlert>
+                        </MudItem>
+                    }
+
+                    <!-- Remarks -->
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Remarks"
+                                     Label="Remarks"
+                                     Variant="Variant.Outlined"
+                                     Lines="3"
+                                     FullWidth="@true" />
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Action Buttons -->
+                <div class="d-flex justify-end gap-2 mt-6">
+                    <MudButton Variant="Variant.Outlined"
+                              Color="Color.Secondary"
+                              OnClick="Cancel"
+                              Disabled="@_isSaving">
+                        Cancel
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              OnClick="Save"
+                              Disabled="@(!isValid || _isSaving || _hasConflict || !string.IsNullOrEmpty(_dateTimeValidationMessage))"
+                              StartIcon="@Icons.Material.Filled.Save">
+                        @if (_isSaving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <span class="ml-2">Updating...</span>
+                        }
+                        else
+                        {
+                            <span>Update Course Plan</span>
+                        }
+                    </MudButton>
+                </div>
+            </MudPaper>
+        </MudForm>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private MudForm form;
+    private bool isValid;
+    private bool _isSaving;
+    private bool _isLoading = true;
+
+    private UpdateCoursePlanningRequest _model = new();
+    private List<CourseListDto> _courses = new();
+    private List<StaffListDto> _trainers = new();
+
+    private DateTime? _startDate;
+    private TimeSpan? _startTime;
+    private DateTime? _endDate;
+    private TimeSpan? _endTime;
+
+    private string _dateTimeValidationMessage = string.Empty;
+    private bool _hasConflict = false;
+    private string _conflictMessage = string.Empty;
+    private List<CoursePlanningListDto> _conflictingSchedules = new();
+
+    private int _tenantId;
+    private int _userId;
+    private int? _createdBy;
+    private int? _staffId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (!user.Identity?.IsAuthenticated ?? true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+
+            // Role-based filtering
+            if (roleClaim != "Super Admin")
+            {
+                _createdBy = _userId;
+            }
+
+            await LoadDropdowns();
+            await LoadCoursePlan();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error initializing edit course planning page");
+            Snackbar.Add("Error loading page. Please refresh.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadDropdowns()
+    {
+        try
+        {
+            // Load active courses
+            var coursesResult = await CourseService.GetPagedAsync(
+                _tenantId, 1, 1000, null, null, null, true, null, _createdBy, _staffId);
+            _courses = coursesResult.Items.ToList();
+
+            // Load active trainers
+            var trainersResult = await StaffService.GetPagedAsync(_tenantId, 1, 1000, null, null, null);
+            _trainers = trainersResult.Items.Where(s => s.IsActive).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error loading dropdowns");
+            Snackbar.Add("Error loading form data", Severity.Error);
+        }
+    }
+
+    private async Task LoadCoursePlan()
+    {
+        try
+        {
+            var coursePlan = await CoursePlanningService.GetByIdAsync(Id, _tenantId);
+
+            if (coursePlan == null)
+            {
+                Snackbar.Add("Course plan not found", Severity.Error);
+                Navigation.NavigateTo("/tms/planning");
+                return;
+            }
+
+            _model.Id = coursePlan.Id;
+            _model.CourseId = coursePlan.CourseId;
+            _model.Venue = coursePlan.Venue;
+            _model.TrainerId = coursePlan.TrainerId;
+            _model.Remarks = coursePlan.Remarks;
+
+            _startDate = coursePlan.StartDate;
+            _startTime = coursePlan.StartTime;
+            _endDate = coursePlan.EndDate;
+            _endTime = coursePlan.EndTime;
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error loading course plan");
+            Snackbar.Add("Error loading course plan", Severity.Error);
+            Navigation.NavigateTo("/tms/planning");
+        }
+    }
+
+    private void OnStartDateChanged(DateTime? date)
+    {
+        _startDate = date;
+        ValidateDateTimeRange();
+        CheckConflict();
+    }
+
+    private void OnStartTimeChanged(TimeSpan? time)
+    {
+        _startTime = time;
+        ValidateDateTimeRange();
+        CheckConflict();
+    }
+
+    private void OnEndDateChanged(DateTime? date)
+    {
+        _endDate = date;
+        ValidateDateTimeRange();
+        CheckConflict();
+    }
+
+    private void OnEndTimeChanged(TimeSpan? time)
+    {
+        _endTime = time;
+        ValidateDateTimeRange();
+        CheckConflict();
+    }
+
+    private void OnTrainerChanged(int trainerId)
+    {
+        _model.TrainerId = trainerId;
+        CheckConflict();
+    }
+
+    private void ValidateDateTimeRange()
+    {
+        _dateTimeValidationMessage = string.Empty;
+
+        if (!_startDate.HasValue || !_startTime.HasValue || !_endDate.HasValue || !_endTime.HasValue)
+        {
+            return;
+        }
+
+        var startDateTime = _startDate.Value.Add(_startTime.Value);
+        var endDateTime = _endDate.Value.Add(_endTime.Value);
+
+        if (startDateTime < DateTime.Now)
+        {
+            _dateTimeValidationMessage = "Start date and time cannot be in the past.";
+            return;
+        }
+
+        if (endDateTime <= startDateTime)
+        {
+            _dateTimeValidationMessage = "End date and time must be after start date and time.";
+            return;
+        }
+    }
+
+    private async void CheckConflict()
+    {
+        _hasConflict = false;
+        _conflictMessage = string.Empty;
+        _conflictingSchedules.Clear();
+
+        if (_model.TrainerId == 0 || !_startDate.HasValue || !_startTime.HasValue || !_endDate.HasValue || !_endTime.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new ConflictValidationRequest
+            {
+                Id = Id,
+                TrainerId = _model.TrainerId,
+                StartDate = _startDate.Value,
+                StartTime = _startTime.Value,
+                EndDate = _endDate.Value,
+                EndTime = _endTime.Value,
+                TenantId = _tenantId
+            };
+
+            var result = await CoursePlanningService.ValidateConflictAsync(request);
+
+            if (result.HasConflict)
+            {
+                _hasConflict = true;
+                _conflictMessage = result.Message;
+                _conflictingSchedules = result.ConflictingSchedules;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error checking conflicts");
+        }
+    }
+
+    private async Task Save()
+    {
+        if (!isValid || _hasConflict || !string.IsNullOrEmpty(_dateTimeValidationMessage))
+        {
+            return;
+        }
+
+        try
+        {
+            _isSaving = true;
+
+            // Map dates and times to model
+            _model.StartDate = _startDate!.Value;
+            _model.StartTime = _startTime!.Value;
+            _model.EndDate = _endDate!.Value;
+            _model.EndTime = _endTime!.Value;
+
+            var ipAddress = Navigation.Uri;
+            var result = await CoursePlanningService.UpdateAsync(_model, _tenantId, _userId, ipAddress);
+
+            Snackbar.Add("Course plan updated successfully", Severity.Success);
+            Navigation.NavigateTo("/tms/planning");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error updating course plan");
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/tms/planning");
+    }
+}

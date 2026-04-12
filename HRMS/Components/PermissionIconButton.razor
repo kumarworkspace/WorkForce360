@@ -1,0 +1,87 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using HRMS.Core.Application.Interfaces
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationHelper AuthorizationHelper
+
+@if (_hasPermission)
+{
+    <MudIconButton Icon="@Icon"
+                   Color="@Color"
+                   Size="@Size"
+                   Title="@Title"
+                   Disabled="@Disabled"
+                   OnClick="@OnClick"
+                   Class="@Class"
+                   Style="@Style" />
+}
+else
+{
+    <MudIconButton Icon="@Icon"
+                   Color="@Color"
+                   Size="@Size"
+                   Title="@(string.IsNullOrEmpty(Tooltip) ? "You do not have permission to perform this action" : Tooltip)"
+                   Disabled="true"
+                   Class="@Class"
+                   Style="@Style" />
+}
+
+@code {
+    [Parameter] public string Icon { get; set; } = string.Empty;
+    [Parameter] public string ModuleName { get; set; } = string.Empty;
+    [Parameter] public int RequiredAccessLevel { get; set; } = 1; // Default: View Access (1)
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public Size Size { get; set; } = Size.Small;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Tooltip { get; set; }
+
+    private bool _hasPermission = false;
+    private int _userId = 0;
+    private int _tenantId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(ModuleName))
+        {
+            _hasPermission = true; // If no module specified, allow (for backward compatibility)
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!user.Identity?.IsAuthenticated ?? true)
+        {
+            _hasPermission = false;
+            return;
+        }
+
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out _userId))
+        {
+            _hasPermission = false;
+            return;
+        }
+
+        if (string.IsNullOrEmpty(tenantIdClaim) || !int.TryParse(tenantIdClaim, out _tenantId))
+        {
+            _hasPermission = false;
+            return;
+        }
+
+        // Check access level for the module
+        var accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, ModuleName, _tenantId);
+        _hasPermission = accessLevel >= RequiredAccessLevel;
+    }
+}
+
+
+
+
+

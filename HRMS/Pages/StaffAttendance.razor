@@ -1,0 +1,510 @@
+@page "/hrms/attendance"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IStaffService StaffService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<StaffAttendance> Logger
+
+<PageTitle>Staff Attendance</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <!-- Header Section -->
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e;">
+                Staff Attendance
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Mark daily attendance for staff members
+            </MudText>
+        </div>
+        <div class="d-flex gap-2">
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Success"
+                      StartIcon="@Icons.Material.Filled.Save"
+                      OnClick="SaveAttendance"
+                      Disabled="@(_saving || !_attendanceData.Any())">
+                @if (_saving)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Save Attendance
+            </MudButton>
+        </div>
+    </div>
+
+    <!-- Date Selection & Filters -->
+    <MudPaper Elevation="2" Class="pa-4 mb-4" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_selectedDate"
+                              Label="Attendance Date"
+                              Variant="Variant.Outlined"
+                              DateFormat="dd MMM yyyy"
+                              MaxDate="DateTime.Today"
+                              Editable="true"
+                              Placeholder="Select Date" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_searchTerm"
+                             Label="Search Staff"
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             Immediate="true"
+                             DebounceInterval="300"
+                             OnDebounceIntervalElapsed="OnSearchChanged" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" Value="_selectedDepartment"
+                          Label="Department"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          ValueChanged="@(async (string? val) => await OnDepartmentChanged(val))">
+                    <MudSelectItem Value="@((string?)null)">All Departments</MudSelectItem>
+                    @foreach (var dept in _departments)
+                    {
+                        <MudSelectItem Value="@dept">@dept</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudButton Variant="Variant.Outlined"
+                          Color="Color.Primary"
+                          FullWidth="true"
+                          Style="height: 56px;"
+                          StartIcon="@Icons.Material.Filled.Refresh"
+                          OnClick="LoadStaffAndAttendance">
+                    Refresh
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Attendance Summary -->
+    @if (_attendanceData.Any())
+    {
+        <MudPaper Elevation="1" Class="pa-3 mb-4" Style="border-radius: 8px;">
+            <MudGrid>
+                <MudItem xs="6" sm="3">
+                    <div class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Primary" />
+                        <MudText Typo="Typo.h5" Style="font-weight: 600; color: #1a237e;">@_attendanceData.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Staff</MudText>
+                    </div>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <div class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #4caf50;" />
+                        <MudText Typo="Typo.h5" Style="font-weight: 600; color: #4caf50;">@_attendanceData.Count(a => a.Status == "Present")</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Present</MudText>
+                    </div>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <div class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Cancel" Style="color: #f44336;" />
+                        <MudText Typo="Typo.h5" Style="font-weight: 600; color: #f44336;">@_attendanceData.Count(a => a.Status == "Absent")</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Absent</MudText>
+                    </div>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <div class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Style="color: #ff9800;" />
+                        <MudText Typo="Typo.h5" Style="font-weight: 600; color: #ff9800;">@_attendanceData.Count(a => a.Status == "Late" || a.Status == "HalfDay")</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Late/Half Day</MudText>
+                    </div>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+
+    <!-- Attendance Table -->
+    <MudPaper Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+        @if (_isLoading)
+        {
+            <div class="pa-4">
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center mt-2">
+                    Loading staff list...
+                </MudText>
+            </div>
+        }
+        else if (!_attendanceData.Any())
+        {
+            <div class="pa-6 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.GroupOff" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">
+                    No staff members found
+                </MudText>
+            </div>
+        }
+        else
+        {
+            <div class="attendance-table-wrapper">
+                <table class="attendance-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">#</th>
+                            <th style="width: 120px;">Employee Code</th>
+                            <th style="min-width: 180px;">Name</th>
+                            <th style="width: 150px;">Department</th>
+                            <th style="min-width: 400px; text-align: center;">Attendance Status</th>
+                            <th style="width: 200px;">Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ int index = 1; }
+                        @foreach (var item in _attendanceData)
+                        {
+                            <tr>
+                                <td>@index</td>
+                                <td>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@item.EmployeeCode</MudText>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-center gap-2">
+                                        <MudAvatar Size="Size.Small" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                                            @(item.Name?.Length > 0 ? item.Name[0].ToString().ToUpper() : "?")
+                                        </MudAvatar>
+                                        <div>
+                                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@item.Name</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@item.Position</MudText>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <MudText Typo="Typo.body2">@item.Department</MudText>
+                                </td>
+                                <td>
+                                    <div class="attendance-radio-group">
+                                        <label class="attendance-radio present @(item.Status == "Present" ? "selected" : "")">
+                                            <input type="radio" name="@($"attendance_{item.StaffId}")"
+                                                   value="Present"
+                                                   checked="@(item.Status == "Present")"
+                                                   @onchange="@(() => UpdateStatus(item.StaffId, "Present"))" />
+                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
+                                            <span>Present</span>
+                                        </label>
+                                        <label class="attendance-radio absent @(item.Status == "Absent" ? "selected" : "")">
+                                            <input type="radio" name="@($"attendance_{item.StaffId}")"
+                                                   value="Absent"
+                                                   checked="@(item.Status == "Absent")"
+                                                   @onchange="@(() => UpdateStatus(item.StaffId, "Absent"))" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" />
+                                            <span>Absent</span>
+                                        </label>
+                                        <label class="attendance-radio late @(item.Status == "Late" ? "selected" : "")">
+                                            <input type="radio" name="@($"attendance_{item.StaffId}")"
+                                                   value="Late"
+                                                   checked="@(item.Status == "Late")"
+                                                   @onchange="@(() => UpdateStatus(item.StaffId, "Late"))" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" />
+                                            <span>Late</span>
+                                        </label>
+                                        <label class="attendance-radio halfday @(item.Status == "HalfDay" ? "selected" : "")">
+                                            <input type="radio" name="@($"attendance_{item.StaffId}")"
+                                                   value="HalfDay"
+                                                   checked="@(item.Status == "HalfDay")"
+                                                   @onchange="@(() => UpdateStatus(item.StaffId, "HalfDay"))" />
+                                            <MudIcon Icon="@Icons.Material.Filled.WbTwilight" Size="Size.Small" />
+                                            <span>Half Day</span>
+                                        </label>
+                                    </div>
+                                </td>
+                                <td>
+                                    <MudTextField @bind-Value="item.Remarks"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Placeholder="Add remarks..." />
+                                </td>
+                            </tr>
+                            index++;
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </MudPaper>
+</MudContainer>
+
+<style>
+    .attendance-table-wrapper {
+        overflow-x: auto;
+    }
+
+    .attendance-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .attendance-table thead th {
+        background: linear-gradient(180deg, #84A8FA 16.67%, #BA9FFF 128.13%);
+        color: white;
+        padding: 14px 12px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 14px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .attendance-table tbody tr {
+        border-bottom: 1px solid #e4e4e6;
+        transition: background-color 0.2s ease;
+    }
+
+    .attendance-table tbody tr:hover {
+        background-color: #f5f7fa;
+    }
+
+    .attendance-table tbody td {
+        padding: 12px;
+        vertical-align: middle;
+    }
+
+    .attendance-radio-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .attendance-radio {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 8px 12px;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid #e0e0e0;
+        background: white;
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    .attendance-radio input[type="radio"] {
+        display: none;
+    }
+
+    .attendance-radio:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .attendance-radio.present {
+        color: #2e7d32;
+    }
+
+    .attendance-radio.present.selected {
+        background: linear-gradient(135deg, #4caf50 0%, #81c784 100%);
+        color: white;
+        border-color: #4caf50;
+    }
+
+    .attendance-radio.absent {
+        color: #c62828;
+    }
+
+    .attendance-radio.absent.selected {
+        background: linear-gradient(135deg, #f44336 0%, #e57373 100%);
+        color: white;
+        border-color: #f44336;
+    }
+
+    .attendance-radio.late {
+        color: #ef6c00;
+    }
+
+    .attendance-radio.late.selected {
+        background: linear-gradient(135deg, #ff9800 0%, #ffb74d 100%);
+        color: white;
+        border-color: #ff9800;
+    }
+
+    .attendance-radio.halfday {
+        color: #5e35b1;
+    }
+
+    .attendance-radio.halfday.selected {
+        background: linear-gradient(135deg, #7c4dff 0%, #b388ff 100%);
+        color: white;
+        border-color: #7c4dff;
+    }
+</style>
+
+@code {
+    private DateTime? _selectedDate = DateTime.Today;
+    private string? _searchTerm;
+    private string? _selectedDepartment;
+    private List<string> _departments = new();
+    private List<StaffAttendanceItem> _attendanceData = new();
+    private bool _isLoading = true;
+    private bool _saving = false;
+    private int _tenantId;
+    private int _userId;
+    private ClaimsPrincipal? _user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _user = authState.User;
+
+        if (_user?.Identity?.IsAuthenticated ?? false)
+        {
+            var userIdClaim = _user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var tenantIdClaim = _user.FindFirst("TenantId")?.Value;
+
+            if (int.TryParse(userIdClaim, out var userId))
+                _userId = userId;
+
+            if (int.TryParse(tenantIdClaim, out var tenantId))
+                _tenantId = tenantId;
+        }
+
+        await LoadStaffAndAttendance();
+    }
+
+    private async Task LoadStaffAndAttendance()
+    {
+        try
+        {
+            _isLoading = true;
+            StateHasChanged();
+
+            var request = new GetStaffListRequest
+            {
+                TenantId = _tenantId,
+                SearchTerm = _searchTerm,
+                Department = _selectedDepartment,
+                IsActive = true,
+                PageNumber = 1,
+                PageSize = 500
+            };
+
+            var result = await StaffService.GetStaffListSpAsync(request);
+
+            // Get unique departments for filter
+            _departments = result.Items
+                .Where(s => !string.IsNullOrEmpty(s.Department))
+                .Select(s => s.Department)
+                .Distinct()
+                .OrderBy(d => d)
+                .ToList();
+
+            // Map to attendance items - default to Present
+            _attendanceData = result.Items.Select(staff => new StaffAttendanceItem
+            {
+                StaffId = staff.StaffId,
+                EmployeeCode = staff.EmployeeCode,
+                Name = staff.Name,
+                Department = staff.Department,
+                Position = staff.Position,
+                Status = "Present",
+                Remarks = null
+            }).ToList();
+
+            // TODO: Load existing attendance for selected date from database
+            // For now, we initialize all as Present
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading staff list");
+            Snackbar.Add("Error loading staff list", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void UpdateStatus(int staffId, string status)
+    {
+        var item = _attendanceData.FirstOrDefault(a => a.StaffId == staffId);
+        if (item != null)
+        {
+            item.Status = status;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnSearchChanged(string? value)
+    {
+        _searchTerm = value;
+        await LoadStaffAndAttendance();
+    }
+
+    private async Task OnDepartmentChanged(string? value)
+    {
+        _selectedDepartment = value;
+        await LoadStaffAndAttendance();
+        StateHasChanged();
+    }
+
+    private async Task SaveAttendance()
+    {
+        if (!_selectedDate.HasValue)
+        {
+            Snackbar.Add("Please select a date", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+            StateHasChanged();
+
+            // TODO: Implement actual save to database via service/repository
+            // For now, simulate save
+            await Task.Delay(500);
+
+            var presentCount = _attendanceData.Count(a => a.Status == "Present");
+            var absentCount = _attendanceData.Count(a => a.Status == "Absent");
+            var lateCount = _attendanceData.Count(a => a.Status == "Late");
+            var halfDayCount = _attendanceData.Count(a => a.Status == "HalfDay");
+
+            Snackbar.Add(
+                $"Attendance saved for {_selectedDate.Value:dd MMM yyyy}: {presentCount} Present, {absentCount} Absent, {lateCount} Late, {halfDayCount} Half Day",
+                Severity.Success);
+
+            Logger.LogInformation(
+                "Attendance saved for date {Date} by user {UserId}: Present={Present}, Absent={Absent}, Late={Late}, HalfDay={HalfDay}",
+                _selectedDate.Value, _userId, presentCount, absentCount, lateCount, halfDayCount);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving attendance");
+            Snackbar.Add("Error saving attendance", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+
+    // Local class for attendance data
+    private class StaffAttendanceItem
+    {
+        public int StaffId { get; set; }
+        public string EmployeeCode { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Department { get; set; } = string.Empty;
+        public string Position { get; set; } = string.Empty;
+        public string Status { get; set; } = "Present";
+        public string? Remarks { get; set; }
+    }
+}

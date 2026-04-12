@@ -1,0 +1,77 @@
+﻿<MudDialog Class="custom-messagebox" >
+    <DialogContent>
+        <MudStack Spacing="2">
+            @if (!string.IsNullOrEmpty(Icon))
+            {
+@*                 <div class="icon-container">
+                    <MudIcon Icon="@Icon" Size="Size.Medium" Color="Color.Primary" Class="messagebox-icon" />
+                </div> *@
+            }
+            <MudText Typo="Typo.h6" >@Title</MudText>
+            <MudText Typo="Typo.body2" Style="marging-bottom:12px">@Message</MudText>
+        </MudStack>
+    </DialogContent>
+
+    <DialogActions >
+        @if (!string.IsNullOrEmpty(CancelButtonText))
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@CancelAction">
+                @CancelButtonText
+            </MudButton>
+        }
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@ConfirmAction">
+            @ConfirmButtonText
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public string Title { get; set; }
+    [Parameter] public string Message { get; set; }
+    [Parameter] public string Icon { get; set; }
+
+    [Parameter] public string ConfirmButtonText { get; set; } = "OK";
+    [Parameter] public string CancelButtonText { get; set; }
+
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task ConfirmAction()
+    {
+        if (OnConfirm.HasDelegate)
+            await OnConfirm.InvokeAsync();
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task CancelAction()
+    {
+        if (OnCancel.HasDelegate)
+            await OnCancel.InvokeAsync();
+        MudDialog.Cancel();
+    }
+}
+
+    <style>
+    .custom-messagebox {
+        border-radius: 8px;
+        padding: 12px;
+        max-width: 400px;
+    }
+
+        .custom-messagebox .mud-typography-h6 {
+            font-weight: 600;
+        }
+
+    .custom-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+    }
+
+        .custom-actions .mud-button {
+            min-width: 100px;
+            border-radius: 6px;
+        }
+    </style>

@@ -1,0 +1,441 @@
+@page "/tms/planning/view/{Id:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICoursePlanningService CoursePlanningService
+@inject ICourseAttendanceService CourseAttendanceService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<CoursePlanningView> Logger
+@inject IJSRuntime JSRuntime
+@using System.Security.Claims
+
+<PageTitle>Course Planning Details</PageTitle>
+
+@if (_isLoading)
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="400px" Class="mt-4" />
+    </MudContainer>
+}
+else if (_coursePlan == null)
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <MudAlert Severity="Severity.Error">Course plan not found</MudAlert>
+        <MudButton OnClick="NavigateToList" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">
+            Back to List
+        </MudButton>
+    </MudContainer>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <!-- Header Section -->
+        <div class="d-flex align-center justify-space-between mb-4">
+            <div>
+                <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">
+                    Course Planning Details
+                </MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_coursePlan.CourseTitle</MudText>
+            </div>
+            <div class="d-flex gap-2">
+                @if (_canManageParticipants)
+                {
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Info"
+                              StartIcon="@Icons.Material.Filled.Group"
+                              OnClick="NavigateToParticipants">
+                        Manage Participants
+                    </MudButton>
+                }
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Download"
+                          OnClick="DownloadPDF">
+                    Download PDF
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.ArrowBack"
+                          OnClick="NavigateToList">
+                    Back to List
+                </MudButton>
+            </div>
+        </div>
+
+        <MudGrid Spacing="3">
+            <!-- Course Information Card -->
+            <MudItem xs="12" md="8">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1a237e; font-weight: 600;">
+                        Course Information
+                    </MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Course Title</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_coursePlan.CourseTitle</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Course Code</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_coursePlan.CourseCode</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Course Type</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_coursePlan.CourseType ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Course Category</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_coursePlan.CourseCategory ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Start Date & Time</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                @_coursePlan.StartDate.ToString("dd MMM yyyy") at @_coursePlan.StartTime.ToString(@"hh\:mm")
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">End Date & Time</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                @_coursePlan.EndDate.ToString("dd MMM yyyy") at @_coursePlan.EndTime.ToString(@"hh\:mm")
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Duration</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_coursePlan.CourseDuration hours</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Venue</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_coursePlan.Venue</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Trainer</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_coursePlan.TrainerName</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Trainer Contact</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_coursePlan.TrainerEmail ?? "N/A")</MudText>
+                        </MudItem>
+                        @if (!string.IsNullOrEmpty(_coursePlan.Remarks))
+                        {
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Remarks</MudText>
+                                <MudText Typo="Typo.body1" Style="font-weight: 500;">@_coursePlan.Remarks</MudText>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <!-- QR Code Card -->
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px; text-align: center;">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1a237e; font-weight: 600;">
+                        QR Code for Attendance
+                    </MudText>
+
+                    @if (!string.IsNullOrEmpty(_coursePlan.QRCodePath))
+                    {
+                        <div class="mb-3">
+                            <img src="@_coursePlan.QRCodePath" alt="QR Code" style="max-width: 250px; width: 100%;" />
+                        </div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                            Scan this QR code to mark attendance
+                        </MudText>
+                    }
+                    else
+                    {
+                        <div class="mb-3 pa-4">
+                            <MudIcon Icon="@Icons.Material.Filled.QrCode" Size="Size.Large" Color="Color.Secondary" />
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                                No QR code generated yet
+                            </MudText>
+                        </div>
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Primary"
+                                  StartIcon="@Icons.Material.Filled.QrCode"
+                                  OnClick="GenerateQRCode"
+                                  FullWidth="true">
+                            Generate QR Code
+                        </MudButton>
+                    }
+                </MudPaper>
+
+                <!-- Status Card -->
+                <MudPaper Elevation="2" Class="pa-4 mt-3" Style="border-radius: 8px;">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1a237e; font-weight: 600;">
+                        Status
+                    </MudText>
+                    <MudChip T="string"
+                            Size="Size.Medium"
+                            Color="@(_coursePlan.IsActive ? Color.Success : Color.Default)"
+                            Style="font-weight: 500; width: 100%;">
+                        @(_coursePlan.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Attendance List -->
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                    <div class="d-flex align-center justify-space-between mb-3">
+                        <MudText Typo="Typo.h6" Style="color: #1a237e; font-weight: 600;">
+                            Attendance List
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Primary"
+                                  StartIcon="@Icons.Material.Filled.Refresh"
+                                  Size="Size.Small"
+                                  OnClick="LoadAttendance">
+                            Refresh
+                        </MudButton>
+                    </div>
+
+                    @if (_loadingAttendance)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                    }
+                    else if (!_attendanceList.Any())
+                    {
+                        <div class="pa-4 text-center">
+                            <MudIcon Icon="@Icons.Material.Filled.EventBusy" Size="Size.Large" Color="Color.Secondary" />
+                            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">
+                                No attendance records found
+                            </MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudTable Items="@_attendanceList"
+                                 Hover="true"
+                                 Striped="true"
+                                 Dense="true"
+                                 Style="border-radius: 8px;">
+                            <HeaderContent>
+                                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Date</MudTh>
+                                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Employee</MudTh>
+                                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Department</MudTh>
+                                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Check In</MudTh>
+                                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Check Out</MudTh>
+                                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Status</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Date">
+                                    <MudText Typo="Typo.body2">@context.AttendanceDate.ToString("dd MMM yyyy")</MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Employee">
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.StaffName</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.EmployeeCode</MudText>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Department">
+                                    <MudText Typo="Typo.body2">@context.Department</MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Check In">
+                                    <MudText Typo="Typo.body2">
+                                        @(context.CheckInTime?.ToString(@"hh\:mm") ?? "N/A")
+                                    </MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Check Out">
+                                    <MudText Typo="Typo.body2">
+                                        @(context.CheckOutTime?.ToString(@"hh\:mm") ?? "N/A")
+                                    </MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Status">
+                                    <MudChip T="string"
+                                            Size="Size.Small"
+                                            Color="@(context.Status == "Present" ? Color.Success : Color.Warning)">
+                                        @context.Status
+                                    </MudChip>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </MudContainer>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private CoursePlanningDto? _coursePlan;
+    private List<AttendanceSummaryDto> _attendanceList = new();
+    private bool _isLoading = true;
+    private bool _loadingAttendance = false;
+    private int _tenantId;
+    private int _userId;
+    private bool _canManageParticipants = false;
+    private ClaimsPrincipal? _user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _user = authState.User;
+
+        if (_user?.Identity?.IsAuthenticated ?? false)
+        {
+            var userIdClaim = _user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var tenantIdClaim = _user.FindFirst("TenantId")?.Value;
+
+            if (int.TryParse(userIdClaim, out var userId))
+                _userId = userId;
+
+            if (int.TryParse(tenantIdClaim, out var tenantId))
+                _tenantId = tenantId;
+
+            var role = _user.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+            _canManageParticipants = role == "Super Admin" || role == "Trainer";
+        }
+
+        await LoadCoursePlan();
+    }
+
+    private async Task LoadCoursePlan()
+    {
+        try
+        {
+            _isLoading = true;
+            _coursePlan = await CoursePlanningService.GetByIdAsync(Id, _tenantId);
+
+            if (_coursePlan != null)
+            {
+                await LoadAttendance();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading course plan with ID: {Id}", Id);
+            Snackbar.Add("Error loading course plan details", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadAttendance()
+    {
+        try
+        {
+            _loadingAttendance = true;
+            var attendance = await CourseAttendanceService.GetAttendanceByCoursePlanAsync(Id, _tenantId);
+            _attendanceList = attendance.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading attendance for course plan: {Id}", Id);
+            Snackbar.Add("Error loading attendance records", Severity.Error);
+        }
+        finally
+        {
+            _loadingAttendance = false;
+        }
+    }
+
+    private async Task GenerateQRCode()
+    {
+        try
+        {
+            var baseUrl = Navigation.BaseUri.TrimEnd('/');
+            var qrCodePath = await CoursePlanningService.GenerateQRCodeAsync(Id, _tenantId, _userId, baseUrl);
+            Snackbar.Add("QR Code generated successfully", Severity.Success);
+            await LoadCoursePlan();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating QR code for course plan: {Id}", Id);
+            Snackbar.Add("Error generating QR code. Please try again.", Severity.Error);
+        }
+    }
+
+    private void NavigateToParticipants()
+    {
+        Navigation.NavigateTo($"/tms/planning/{Id}/participants");
+    }
+
+    private async Task DownloadPDF()
+    {
+        if (_coursePlan == null) return;
+
+        try
+        {
+            var htmlContent = GeneratePdfHtmlContent();
+            await JSRuntime.InvokeVoidAsync("printCoursePlanPdf", htmlContent);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating PDF for course plan: {CoursePlanId}", Id);
+            Snackbar.Add("Error generating PDF. Please try again.", Severity.Error);
+        }
+    }
+
+    private string GeneratePdfHtmlContent()
+    {
+        var sb = new System.Text.StringBuilder();
+        var qrCodeHtml = !string.IsNullOrEmpty(_coursePlan?.QRCodePath)
+            ? "<img src='" + _coursePlan.QRCodePath + "' alt='QR Code' style='max-width: 200px; margin: 20px auto; display: block;' />"
+            : "<p style='text-align: center; color: #666;'>No QR Code Available</p>";
+
+        var startDateTime = _coursePlan?.StartDate.ToString("dd MMM yyyy") + " at " + _coursePlan?.StartTime.ToString(@"hh\:mm");
+        var endDateTime = _coursePlan?.EndDate.ToString("dd MMM yyyy") + " at " + _coursePlan?.EndTime.ToString(@"hh\:mm");
+        var generatedOn = DateTime.Now.ToString("dd MMM yyyy HH:mm");
+
+        sb.Append("<!DOCTYPE html><html><head>");
+        sb.Append("<title>Course Planning Details - " + _coursePlan?.CourseTitle + "</title>");
+        sb.Append("<style>");
+        sb.Append("body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }");
+        sb.Append(".header { text-align: center; border-bottom: 2px solid #1a237e; padding-bottom: 20px; margin-bottom: 20px; }");
+        sb.Append(".header h1 { color: #1a237e; margin: 0; font-size: 24px; }");
+        sb.Append(".header p { color: #666; margin: 5px 0 0 0; }");
+        sb.Append(".section { margin-bottom: 20px; }");
+        sb.Append(".section-title { color: #1a237e; font-weight: bold; font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; }");
+        sb.Append(".info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }");
+        sb.Append(".info-item { margin-bottom: 8px; }");
+        sb.Append(".info-label { color: #666; font-size: 12px; }");
+        sb.Append(".info-value { font-weight: 500; font-size: 14px; }");
+        sb.Append(".qr-section { text-align: center; margin-top: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }");
+        sb.Append(".footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }");
+        sb.Append("</style></head><body>");
+        sb.Append("<div class='header'><h1>Course Planning Details</h1><p>" + _coursePlan?.CourseTitle + "</p></div>");
+        sb.Append("<div class='section'><div class='section-title'>Course Information</div><div class='info-grid'>");
+        sb.Append("<div class='info-item'><div class='info-label'>Course Title</div><div class='info-value'>" + _coursePlan?.CourseTitle + "</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>Course Code</div><div class='info-value'>" + _coursePlan?.CourseCode + "</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>Course Type</div><div class='info-value'>" + (_coursePlan?.CourseType ?? "N/A") + "</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>Course Category</div><div class='info-value'>" + (_coursePlan?.CourseCategory ?? "N/A") + "</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>Start Date &amp; Time</div><div class='info-value'>" + startDateTime + "</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>End Date &amp; Time</div><div class='info-value'>" + endDateTime + "</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>Duration</div><div class='info-value'>" + _coursePlan?.CourseDuration + " hours</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>Venue</div><div class='info-value'>" + _coursePlan?.Venue + "</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>Trainer</div><div class='info-value'>" + _coursePlan?.TrainerName + "</div></div>");
+        sb.Append("<div class='info-item'><div class='info-label'>Trainer Contact</div><div class='info-value'>" + (_coursePlan?.TrainerEmail ?? "N/A") + "</div></div>");
+        sb.Append("</div></div>");
+        sb.Append("<div class='qr-section'><div class='section-title'>QR Code for Attendance</div>" + qrCodeHtml);
+        sb.Append("<p style='font-size: 12px; color: #666;'>Scan this QR code to mark attendance</p></div>");
+        sb.Append("<div class='footer'><p>Generated on " + generatedOn + "</p></div>");
+        sb.Append("</body></html>");
+
+        return sb.ToString();
+    }
+
+    private void NavigateToList()
+    {
+        // If staff came from My Courses, go back there
+        var uri = new Uri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        var from = query.TryGetValue("from", out var f) ? f.ToString() : null;
+        Navigation.NavigateTo(from == "my-courses" ? "/tms/my-courses" : "/tms/planning");
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+}

@@ -1,0 +1,370 @@
+@page "/admin/user-roles"
+@page "/admin/user-roles/{UserId:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@using HRMS.Core.Domain.Interfaces
+@using HRMS.Core.Domain.Entities
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IUserRoleService UserRoleService
+@inject IUnitOfWork UnitOfWork
+@inject IRoleService RoleService
+@inject IStaffService StaffService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>User Role Mapping</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">User Role Mapping</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Assign roles to users for access control</MudText>
+        </div>
+    </div>
+
+    <!-- User Selection -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6">
+                <MudAutocomplete T="StaffListDto"
+                               Value="@_selectedStaff"
+                               ValueChanged="@OnStaffChanged"
+                               SearchFunc="@SearchStaff"
+                               Label="Select Staff"
+                               Variant="Variant.Outlined"
+                               ToStringFunc="@(staff => staff != null ? $"{staff.Name} ({staff.Email}) - {staff.Department}" : string.Empty)"
+                               ResetValueOnEmptyText="true"
+                               Clearable="true">
+                    <ItemTemplate>
+                        <div style="padding: 8px;">
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@context.Name</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">@context.Email - @context.Department</MudText>
+                        </div>
+                    </ItemTemplate>
+                </MudAutocomplete>
+            </MudItem>
+            @if (_selectedStaff != null && _userAssignment != null)
+            {
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Managing roles for: <strong>@_userAssignment.UserName</strong> (@_userAssignment.UserEmail)
+                    </MudText>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_selectedStaff == null)
+    {
+        <MudPaper Class="pa-4" Elevation="2" Style="border-radius: 8px;">
+            <div class="d-flex flex-column align-center pa-8">
+                <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Large" Color="Color.Default" Style="opacity: 0.3; margin-bottom: 16px;" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary">Select a staff member to manage roles</MudText>
+            </div>
+        </MudPaper>
+    }
+    else if (_userAssignment == null)
+    {
+        <MudPaper Class="pa-4" Elevation="2" Style="border-radius: 8px;">
+            <MudText Typo="Typo.body1">User not found.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudGrid Spacing="3">
+            <!-- Available Roles -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1a237e;">Available Roles</MudText>
+                    @if (_userAssignment.AvailableRoles.Any())
+                    {
+                        <MudList T="RoleDto" Dense="true">
+                            @foreach (var role in _userAssignment.AvailableRoles)
+                            {
+                                <MudListItem T="RoleDto">
+                                    <div class="d-flex align-center justify-space-between">
+                                        <div>
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@role.RoleName</MudText>
+                                            @if (!string.IsNullOrEmpty(role.Description))
+                                            {
+                                                <MudText Typo="Typo.body2" Color="Color.Secondary">@role.Description</MudText>
+                                            }
+                                        </div>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Add" 
+                                                     Color="Color.Success" 
+                                                     Size="Size.Small"
+                                                     OnClick="@(() => AssignRole(role.RoleId))" />
+                                    </div>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">All roles are assigned</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Assigned Roles -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1a237e;">Assigned Roles</MudText>
+                    @if (_userAssignment.AssignedRoles.Any())
+                    {
+                        <MudList T="RoleDto" Dense="true">
+                            @foreach (var role in _userAssignment.AssignedRoles)
+                            {
+                                <MudListItem T="RoleDto">
+                                    <div class="d-flex align-center justify-space-between">
+                                        <div>
+                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@role.RoleName</MudText>
+                                            @if (!string.IsNullOrEmpty(role.Description))
+                                            {
+                                                <MudText Typo="Typo.body2" Color="Color.Secondary">@role.Description</MudText>
+                                            }
+                                        </div>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Remove" 
+                                                     Color="Color.Error" 
+                                                     Size="Size.Small"
+                                                     OnClick="@(() => RemoveRole(role.RoleId))" />
+                                    </div>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No roles assigned</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int? UserId { get; set; }
+
+    private List<StaffListDto> _staffList = new();
+    private StaffListDto? _selectedStaff;
+    private int? _selectedStaffId;
+    private int? _selectedUserId; // Mapped UserId from Staff
+    private UserRoleAssignmentDto? _userAssignment;
+    private bool _isLoading = true;
+    private int _tenantId = 0;
+    private int _userId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst("UserId")?.Value;
+
+            if (int.TryParse(tenantIdClaim, out var tid))
+                _tenantId = tid;
+            if (int.TryParse(userIdClaim, out var uid))
+                _userId = uid;
+
+            await LoadStaff();
+
+            if (UserId.HasValue)
+            {
+                // Find staff by matching UserId (if UserId corresponds to StaffId)
+                var staff = _staffList.FirstOrDefault(s => s.StaffId == UserId.Value);
+                if (staff != null)
+                {
+                    _selectedStaffId = staff.StaffId;
+                    await MapStaffToUserAndLoad(staff.StaffId);
+                }
+            }
+        }
+    }
+
+    private async Task LoadStaff()
+    {
+        try
+        {
+            _isLoading = true;
+            // Get all staff for the tenant (using a large page size to get all)
+            var pagedResult = await StaffService.GetPagedAsync(_tenantId, 1, 10000, null, null, null);
+            _staffList = pagedResult.Items
+                .Where(s => s.IsActive && !string.IsNullOrEmpty(s.Email))
+                .OrderBy(s => s.Name)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            Snackbar.Add($"Error loading staff: {errorMessage}", Severity.Error);
+            _staffList = new List<StaffListDto>();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task MapStaffToUserAndLoad(int staffId)
+    {
+        try
+        {
+            var staff = _staffList.FirstOrDefault(s => s.StaffId == staffId);
+            if (staff == null)
+            {
+                Snackbar.Add("Staff not found", Severity.Warning);
+                return;
+            }
+
+            // Find User by StaffId (direct link)
+            var allUsers = await UnitOfWork.User.GetAllUsers();
+            var user = allUsers.FirstOrDefault(u => 
+                u.TenantId == _tenantId && 
+                u.IsActive && 
+                u.StaffId.HasValue &&
+                u.StaffId.Value == staffId);
+
+            // If not found by StaffId, try matching by Email (backward compatibility)
+            if (user == null && !string.IsNullOrEmpty(staff.Email))
+            {
+                user = allUsers.FirstOrDefault(u => 
+                    u.TenantId == _tenantId && 
+                    u.IsActive && 
+                    !string.IsNullOrEmpty(u.Email) &&
+                    u.Email.Equals(staff.Email, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (user == null)
+            {
+                Snackbar.Add($"No user account found for this staff member. Please create a user account first.", Severity.Warning);
+                _selectedUserId = null;
+                _userAssignment = null;
+                return;
+            }
+
+            _selectedUserId = user.UserId;
+            await LoadUserAssignment();
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            Snackbar.Add($"Error mapping staff to user: {errorMessage}", Severity.Error);
+        }
+    }
+
+    private async Task<IEnumerable<StaffListDto>> SearchStaff(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return _staffList.Take(50);
+        }
+        
+        var searchLower = value.ToLower();
+        return _staffList.Where(s => 
+            (s.Name?.ToLower().Contains(searchLower) ?? false) ||
+            (s.Email?.ToLower().Contains(searchLower) ?? false) ||
+            (s.Department?.ToLower().Contains(searchLower) ?? false)
+        ).Take(50);
+    }
+
+    private async Task OnStaffChanged(StaffListDto? staff)
+    {
+        _selectedStaff = staff;
+        _selectedStaffId = staff?.StaffId;
+        
+        if (staff != null && staff.StaffId > 0)
+        {
+            await MapStaffToUserAndLoad(staff.StaffId);
+        }
+        else
+        {
+            _selectedUserId = null;
+            _userAssignment = null;
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadUserAssignment()
+    {
+        if (!_selectedUserId.HasValue) return;
+
+        try
+        {
+            _isLoading = true;
+            _userAssignment = await UserRoleService.GetUserRoleAssignmentAsync(_selectedUserId.Value, _tenantId);
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            if (errorMessage.Contains("Operand type clash"))
+            {
+                Snackbar.Add("Database schema mismatch detected. Please ensure UserRoles.UserId column type matches the User table.", Severity.Error);
+            }
+            else
+            {
+                Snackbar.Add($"Error loading user assignment: {errorMessage}", Severity.Error);
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AssignRole(int roleId)
+    {
+        if (!_selectedUserId.HasValue || _userAssignment == null) return;
+
+        try
+        {
+            var currentRoleIds = _userAssignment.RoleIds.ToList();
+            if (!currentRoleIds.Contains(roleId))
+            {
+                currentRoleIds.Add(roleId);
+            }
+
+            var request = new AssignUserRolesRequest
+            {
+                UserId = _selectedUserId.Value,
+                RoleIds = currentRoleIds
+            };
+
+            await UserRoleService.AssignRolesAsync(request, _tenantId, _userId);
+            Snackbar.Add("Role assigned successfully", Severity.Success);
+            await LoadUserAssignment();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RemoveRole(int roleId)
+    {
+        if (!_selectedUserId.HasValue) return;
+
+        try
+        {
+            await UserRoleService.RemoveRoleAsync(_selectedUserId.Value, roleId, _tenantId, _userId);
+            Snackbar.Add("Role removed successfully", Severity.Success);
+            await LoadUserAssignment();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+}
+

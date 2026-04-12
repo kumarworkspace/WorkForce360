@@ -1,0 +1,393 @@
+@page "/admin/users"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IUserService UserService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IHttpContextAccessor HttpContextAccessor
+@inject ILogger<UserList> Logger
+
+<PageTitle>User Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">User Management</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage and view all user accounts</MudText>
+        </div>
+        @if (_accessLevel >= 2)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Size="Size.Medium"
+                       Style="box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                       OnClick="NavigateToCreate">
+                Create User
+            </MudButton>
+        }
+    </div>
+
+    <!-- Search and Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="4">
+                <MudTextField Value="@_searchTerm" 
+                             ValueChanged="@OnSearchChangedCallback"
+                             Label="Search by Name, Email" 
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect Value="@_selectedRole" 
+                          ValueChanged="@OnRoleChangedCallback"
+                          Label="Select Role" 
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="string">
+                    <MudSelectItem Value="@("Super Admin")">Super Admin</MudSelectItem>
+                    <MudSelectItem Value="@("HR Admin")">HR Admin</MudSelectItem>
+                    <MudSelectItem Value="@("Manager")">Manager</MudSelectItem>
+                    <MudSelectItem Value="@("Trainer")">Trainer</MudSelectItem>
+                    <MudSelectItem Value="@("Staff")">Staff</MudSelectItem>
+                    <MudSelectItem Value="@("IT Admin")">IT Admin</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudButton Variant="Variant.Outlined" 
+                          Color="Color.Error" 
+                          OnClick="ClearFilters"
+                          FullWidth="true">
+                    Clear
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_pagedResult == null || !_pagedResult.Items.Any())
+    {
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.body1">No users found.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+            <MudTable Items="_pagedResult.Items" Hover="true" Dense="true" Striped="true" Style="background-color: white;">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Email</MudTh>
+                    <MudTh>Role</MudTh>
+                    <MudTh>Staff</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Email Verified</MudTh>
+                    <MudTh>Created Date</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">
+                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@context.FullName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Email">@context.Email</MudTd>
+                    <MudTd DataLabel="Role">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.Role</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Staff">
+                        @if (!string.IsNullOrEmpty(context.StaffName))
+                        {
+                            <MudText Typo="Typo.body2">@context.StaffName</MudText>
+                            @if (!string.IsNullOrEmpty(context.StaffDepartment))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.StaffDepartment</MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">-</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Error)">
+                            @(context.IsActive ? "Active" : "Inactive")
+                        </MudChip>
+                        @if (context.IsLocked)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-2">Locked</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Email Verified">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsEmailVerified ? Color.Success : Color.Default)">
+                            @(context.IsEmailVerified ? "Verified" : "Not Verified")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Created Date">@context.CreatedDate.ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                      Color="Color.Info"
+                                      Size="Size.Small"
+                                      Title="View"
+                                      OnClick="@(() => ViewUser(context.UserId))" />
+                        @if (_accessLevel >= 2)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                          Color="Color.Primary"
+                                          Size="Size.Small"
+                                          Title="Edit"
+                                          OnClick="@(() => EditUser(context))" />
+                        }
+                        @if (_accessLevel >= 3)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                          Color="Color.Error"
+                                          Size="Size.Small"
+                                          Title="Delete"
+                                          OnClick="@(() => DeleteUser(context.UserId, context.FullName))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <!-- Pagination -->
+            <div class="d-flex align-center justify-space-between pa-3" style="background-color: #f5f5f5; border-top: 1px solid #e0e0e0;">
+                <div class="d-flex align-center" style="gap: 8px;">
+                    <MudText Typo="Typo.body2">Rows per page:</MudText>
+                    <MudSelect T="int" Value="@_pageSize" ValueChanged="OnPageSizeChanged" Dense="true" Style="width:80px;" Variant="Variant.Outlined">
+                        <MudSelectItem T="int" Value="10">10</MudSelectItem>
+                        <MudSelectItem T="int" Value="25">25</MudSelectItem>
+                        <MudSelectItem T="int" Value="50">50</MudSelectItem>
+                        <MudSelectItem T="int" Value="100">100</MudSelectItem>
+                    </MudSelect>
+                </div>
+                <MudText Typo="Typo.body2" Color="Color.Default">
+                    Showing <strong>@((_pageNumber - 1) * _pageSize + 1)</strong> - <strong>@(Math.Min(_pageNumber * _pageSize, _pagedResult.TotalCount))</strong> of <strong>@_pagedResult.TotalCount</strong> users
+                </MudText>
+                <MudPagination Count="@((int)Math.Ceiling((double)_pagedResult.TotalCount / _pageSize))"
+                               Selected="@_pageNumber"
+                               SelectedChanged="OnPageChanged"
+                               ShowFirstButton="true"
+                               ShowLastButton="true" />
+            </div>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private PagedResult<UserListDto>? _pagedResult;
+    private bool _isLoading = true;
+    private int _tenantId = 0;
+    private int _userId = 0;
+    private int _accessLevel = 0;
+    private int _pageNumber = 1;
+    private int _pageSize = 10;
+    private string? _searchTerm;
+    private string? _selectedRole;
+    private System.Threading.Timer? _searchDebounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(tenantIdClaim, out var tid))
+                _tenantId = tid;
+            if (int.TryParse(userIdClaim, out var uid))
+                _userId = uid;
+
+            _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Role Management", _tenantId);
+
+            await LoadUsersAsync();
+        }
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _pagedResult = await UserService.GetPagedAsync(_tenantId, _pageNumber, _pageSize, _searchTerm, _selectedRole);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading users: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _pageNumber = page;
+        await LoadUsersAsync();
+    }
+
+    private async Task OnPageSizeChanged(int pageSize)
+    {
+        _pageSize = pageSize;
+        _pageNumber = 1;
+        await LoadUsersAsync();
+    }
+
+    private async Task OnSearchChanged(string? value)
+    {
+        _searchTerm = value;
+        _pageNumber = 1;
+        
+        // Debounce search - wait 500ms after user stops typing
+        _searchDebounceTimer?.Dispose();
+        _searchDebounceTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadUsersAsync();
+                StateHasChanged();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private EventCallback<string?> OnSearchChangedCallback => EventCallback.Factory.Create<string?>(this, OnSearchChanged);
+
+    private async Task OnRoleChanged(string? value)
+    {
+        _selectedRole = value;
+        _pageNumber = 1;
+        await LoadUsersAsync();
+    }
+
+    private EventCallback<string?> OnRoleChangedCallback => EventCallback.Factory.Create<string?>(this, OnRoleChanged);
+
+    private async Task ClearFilters()
+    {
+        _searchTerm = null;
+        _selectedRole = null;
+        _pageNumber = 1;
+        await LoadUsersAsync();
+    }
+    
+    public void Dispose()
+    {
+        _searchDebounceTimer?.Dispose();
+    }
+
+    private void NavigateToCreate()
+    {
+        Navigation.NavigateTo("/admin/create-user");
+    }
+
+    private async Task ViewUser(int userId)
+    {
+        try
+        {
+            var user = await UserService.GetByIdAsync(userId, _tenantId);
+            if (user == null)
+            {
+                Snackbar.Add("User not found", Severity.Error);
+                return;
+            }
+
+            var message = $"<strong>Name:</strong> {user.FullName}<br/>" +
+                         $"<strong>Email:</strong> {user.Email}<br/>" +
+                         $"<strong>Role:</strong> {user.Role}<br/>" +
+                         $"<strong>Status:</strong> {(user.IsActive ? "Active" : "Inactive")}<br/>" +
+                         $"<strong>Email Verified:</strong> {(user.IsEmailVerified ? "Yes" : "No")}<br/>" +
+                         $"<strong>Locked:</strong> {(user.IsLocked ? "Yes" : "No")}<br/>" +
+                         $"<strong>Staff:</strong> {user.StaffName ?? "N/A"}<br/>" +
+                         $"<strong>Created Date:</strong> {user.CreatedDate:MM/dd/yyyy}";
+
+            await DialogService.ShowMessageBox("User Details", (MarkupString)message);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error viewing user {UserId}", userId);
+            Snackbar.Add($"Error viewing user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void EditUser(UserListDto user)
+    {
+        // Navigate to CreateUser page with userId for edit mode
+        Navigation.NavigateTo($"/admin/create-user?userId={user.UserId}");
+    }
+
+    private async Task DeleteUser(int userId, string userName)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete User",
+            $"Are you sure you want to delete user '{userName}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                var ipAddress = GetClientIpAddress();
+                await UserService.DeleteAsync(userId, _tenantId, _userId, ipAddress);
+                Snackbar.Add("User deleted successfully", Severity.Success);
+                await LoadUsersAsync();
+
+                // Audit logging is done in the service
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting user {UserId}", userId);
+                Snackbar.Add($"Error deleting user: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private string? GetClientIpAddress()
+    {
+        try
+        {
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext == null) return null;
+
+            var forwardedFor = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(forwardedFor))
+            {
+                var ips = forwardedFor.Split(',');
+                if (ips.Length > 0)
+                {
+                    return ips[0].Trim();
+                }
+            }
+
+            var realIp = httpContext.Request.Headers["X-Real-IP"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(realIp))
+            {
+                return realIp;
+            }
+
+            return httpContext.Connection.RemoteIpAddress?.ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+}
+
+
+
+
+

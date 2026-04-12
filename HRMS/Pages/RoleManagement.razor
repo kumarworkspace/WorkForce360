@@ -1,0 +1,287 @@
+@page "/admin/roles"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IRoleService RoleService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ILogger<RoleManagement>? Logger
+
+<PageTitle>Role Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Role Management</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Create and manage roles for access control</MudText>
+        </div>
+        @if (_accessLevel >= 2)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Size="Size.Medium"
+                       Style="box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                       OnClick="OpenCreateDialog">
+                Create Role
+            </MudButton>
+        }
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_roles == null || !_roles.Any())
+    {
+        <MudPaper Class="pa-4" Elevation="2" Style="border-radius: 8px;">
+            <div class="d-flex flex-column align-center pa-8">
+                <MudIcon Icon="@Icons.Material.Filled.Assignment" Size="Size.Large" Color="Color.Default" Style="opacity: 0.3; margin-bottom: 16px;" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary">No roles found</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">Create your first role to get started</MudText>
+            </div>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+            <MudTable Items="_roles" Hover="true" Dense="true" Striped="true" Style="background-color: white;">
+                <HeaderContent>
+                    <MudTh>Role Name</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Users Assigned</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Created Date</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Role Name">
+                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@context.RoleName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Description">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            @(string.IsNullOrEmpty(context.Description) ? "-" : context.Description)
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Users Assigned">
+                        <MudChip T="int" Size="Size.Small" Color="Color.Info">@context.UserCount</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (context.IsActive)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error">Inactive</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Created Date">
+                        <MudText Typo="Typo.body2">@context.CreatedDate.ToString("MMM dd, yyyy")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true" Spacing="1">
+                            @if (_accessLevel >= 2)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                             Color="Color.Primary"
+                                             Size="Size.Small"
+                                             Title="Edit Role"
+                                             OnClick="@(() => OpenEditDialog(context))" />
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.Security" 
+                                         Color="Color.Info" 
+                                         Size="Size.Small"
+                                         Title="Manage Permissions"
+                                         OnClick="@(() => NavigateToAccessControl(context.RoleId))" />
+                            @if (context.IsActive)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Block" 
+                                             Color="Color.Warning" 
+                                             Size="Size.Small"
+                                             Title="Deactivate"
+                                             OnClick="@(() => DeactivateRole(context))" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" 
+                                             Color="Color.Success" 
+                                             Size="Size.Small"
+                                             Title="Activate"
+                                             OnClick="@(() => ActivateRole(context))" />
+                            }
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private List<RoleDto>? _roles;
+    private bool _isLoading = true;
+    private int _tenantId = 0;
+    private int _userId = 0;
+    private int _accessLevel = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst("UserId")?.Value;
+
+            if (int.TryParse(tenantIdClaim, out var tid))
+                _tenantId = tid;
+            if (int.TryParse(userIdClaim, out var uid))
+                _userId = uid;
+
+            _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Role Management", _tenantId);
+
+            await LoadRoles();
+        }
+    }
+
+    private async Task LoadRoles()
+    {
+        try
+        {
+            _isLoading = true;
+            _roles = (await RoleService.GetByTenantIdAsync(_tenantId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            if (errorMessage.Contains("Operand type clash"))
+            {
+                Snackbar.Add("Database schema mismatch detected. Please ensure UserRoles.UserId column type matches the User table.", Severity.Error);
+            }
+            else
+            {
+                Snackbar.Add($"Error loading roles: {errorMessage}", Severity.Error);
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["IsEdit"] = false,
+            ["Role"] = (RoleDto?)null,
+            ["TenantId"] = _tenantId,
+            ["UserId"] = _userId
+        };
+
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<RoleDialog>("Create Role", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadRoles();
+        }
+    }
+
+    private async Task OpenEditDialog(RoleDto role)
+    {
+        var parameters = new DialogParameters
+        {
+            ["IsEdit"] = true,
+            ["Role"] = role,
+            ["TenantId"] = _tenantId,
+            ["UserId"] = _userId
+        };
+
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<RoleDialog>("Edit Role", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadRoles();
+        }
+    }
+
+    private void NavigateToAccessControl(int roleId)
+    {
+        Navigation.NavigateTo($"/admin/access-control/{roleId}");
+    }
+
+    private async Task ActivateRole(RoleDto role)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Activate Role",
+            $"Are you sure you want to activate '{role.RoleName}'?",
+            yesText: "Activate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await RoleService.ActivateAsync(role.RoleId, _tenantId, _userId);
+                Snackbar.Add("Role activated successfully", Severity.Success);
+                await LoadRoles();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeactivateRole(RoleDto role)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Deactivate Role",
+            $"Are you sure you want to deactivate '{role.RoleName}'? Users with this role will lose access.",
+            yesText: "Deactivate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await RoleService.DeactivateAsync(role.RoleId, _tenantId, _userId);
+                Snackbar.Add("Role deactivated successfully", Severity.Success);
+                await LoadRoles();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+}
+

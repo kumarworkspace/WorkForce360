@@ -1,0 +1,126 @@
+@using HRMS.Core.Application.DTOs
+@using MudBlazor
+@inject IHolidayMasterService HolidayMasterService
+@inject ISnackbar Snackbar
+@inject ILogger<HolidayDialog> Logger
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Holiday == null ? "Add Holiday" : "Edit Holiday")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudDatePicker Date="@_holidayDate"
+                         DateChanged="OnDateChanged"
+                         Label="Holiday Date *" 
+                         Variant="Variant.Outlined" 
+                         Required="true"
+                         FullWidth="@true" />
+            <MudTextField @bind-Value="@_holidayName" 
+                         Label="Holiday Name *" 
+                         Variant="Variant.Outlined" 
+                         Required="true"
+                         RequiredError="Holiday name is required"
+                         FullWidth="@true" />
+            @if (Holiday != null)
+            {
+                <MudCheckBox T="bool" @bind-Value="@_isActive" Color="Color.Primary" Class="mt-3">
+                    <MudText Typo="Typo.body2">Is Active</MudText>
+                </MudCheckBox>
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!isValid)">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public HolidayMasterDto? Holiday { get; set; }
+    [Parameter] public int TenantId { get; set; }
+    [Parameter] public int UserId { get; set; }
+
+    private MudForm? form;
+    private bool isValid;
+    private DateTime? _holidayDate;
+    private string _holidayName = string.Empty;
+    private bool _isActive = true;
+
+    protected override void OnInitialized()
+    {
+        if (Holiday != null)
+        {
+            _holidayDate = Holiday.HolidayDate;
+            _holidayName = Holiday.HolidayName;
+            _isActive = Holiday.IsActive;
+        }
+        else
+        {
+            _holidayDate = DateTime.Today;
+        }
+    }
+
+    private void OnDateChanged(DateTime? date)
+    {
+        _holidayDate = date;
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+
+    private async Task Save()
+    {
+        await form!.Validate();
+        if (!isValid || !_holidayDate.HasValue || string.IsNullOrWhiteSpace(_holidayName))
+        {
+            if (string.IsNullOrWhiteSpace(_holidayName))
+            {
+                Snackbar.Add("Holiday name is required", Severity.Warning);
+            }
+            if (!_holidayDate.HasValue)
+            {
+                Snackbar.Add("Holiday date is required", Severity.Warning);
+            }
+            return;
+        }
+
+        try
+        {
+            if (Holiday == null)
+            {
+                var createRequest = new CreateHolidayMasterDto
+                {
+                    HolidayDate = _holidayDate.Value,
+                    HolidayName = _holidayName.Trim()
+                };
+                var result = await HolidayMasterService.CreateAsync(createRequest, TenantId, UserId);
+                Snackbar.Add("Holiday created successfully", Severity.Success);
+                MudDialog?.Close(DialogResult.Ok(result));
+            }
+            else
+            {
+                var updateRequest = new UpdateHolidayMasterDto
+                {
+                    HolidayId = Holiday.HolidayId,
+                    HolidayDate = _holidayDate.Value,
+                    HolidayName = _holidayName.Trim(),
+                    IsActive = _isActive
+                };
+                var result = await HolidayMasterService.UpdateAsync(updateRequest, TenantId, UserId);
+                Snackbar.Add("Holiday updated successfully", Severity.Success);
+                MudDialog?.Close(DialogResult.Ok(result));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving holiday");
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            Snackbar.Add($"Error saving holiday: {errorMessage}", Severity.Error);
+        }
+    }
+}
+

@@ -1,0 +1,533 @@
+@page "/hrms/leave/approval"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILeaveOtService LeaveOtService
+@inject IStaffService StaffService
+@inject IMasterDropdownService MasterDropdownService
+@inject IUserService UserService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<LeaveApproval> Logger
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IDialogService DialogService
+@inject HRMS.Core.Domain.Interfaces.IUnitOfWork UnitOfWork
+@using HRMS.Core.Domain.Entities
+
+<PageTitle>Leave / OT Approval</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Leave / OT Approval</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Review and approve leave/overtime requests</MudText>
+        </div>
+    </div>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" Value="@_statusFilter"
+                          ValueChanged="OnStatusFilterChanged"
+                          Label="Filter by Status"
+                          Variant="Variant.Outlined"
+                          Clearable="true">
+                    <MudSelectItem T="string" Value="@("PENDING")">Pending</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("APPROVED")">Approved</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("REJECTED")">Rejected</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CANCELLED")">Cancelled</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" Value="@_requestTypeFilter"
+                          ValueChanged="OnRequestTypeFilterChanged"
+                          Label="Request Type"
+                          Variant="Variant.Outlined"
+                          Clearable="true">
+                    @foreach (var requestType in _requestTypes)
+                    {
+                        <MudSelectItem T="string" Value="@requestType.Name">@requestType.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker Date="@_fromDateFilter"
+                              DateChanged="OnFromDateFilterChanged"
+                              Label="From Date"
+                              Variant="Variant.Outlined"
+                              Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker Date="@_toDateFilter"
+                              DateChanged="OnToDateFilterChanged"
+                              Label="To Date"
+                              Variant="Variant.Outlined"
+                              MinDate="@_fromDateFilter"
+                              Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField Value="@_searchTerm"
+                             ValueChanged="@((string? v) => OnSearchTermChanged(v))"
+                             Placeholder="Search by staff name..."
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="ClearFilters" Class="mt-2">
+                    Clear All Filters
+                </MudButton>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSwitch Value="@_showAllRequests" 
+                          Label="Show All Requests"
+                          Color="Color.Primary"
+                          ValueChanged="@(async (bool value) => await OnShowAllChanged(value))"
+                          Class="mt-2">
+                    @if (_isHR)
+                    {
+                        <MudText Typo="Typo.caption">(HR Only: Show all, not just pending)</MudText>
+                    }
+                </MudSwitch>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!_requests.Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            @if (_isHR)
+            {
+                <span>No requests found for the selected criteria.</span>
+            }
+            else if (_staffId.HasValue)
+            {
+                <span>No pending leave/OT requests found for your direct reports.</span>
+            }
+            else
+            {
+                <span>No requests found. Please ensure your user account is linked to a staff record.</span>
+            }
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_requests" Dense="true" Hover="true" Bordered="false" Striped="true" Class="mt-4" Elevation="2">
+            <HeaderContent>
+                <MudTh>Staff Name</MudTh>
+                <MudTh>Request Type</MudTh>
+                <MudTh>Leave Type</MudTh>
+                <MudTh>From Date</MudTh>
+                <MudTh>To Date</MudTh>
+                <MudTh>Days/Hours</MudTh>
+                <MudTh>Reason</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Staff Name">@context.StaffName</MudTd>
+                <MudTd DataLabel="Request Type">@context.RequestTypeName</MudTd>
+                <MudTd DataLabel="Leave Type">@(context.LeaveTypeName ?? "N/A")</MudTd>
+                <MudTd DataLabel="From Date">@context.FromDate.ToString("MMM dd, yyyy")</MudTd>
+                <MudTd DataLabel="To Date">@context.ToDate.ToString("MMM dd, yyyy")</MudTd>
+                <MudTd DataLabel="Days/Hours">
+                    @if (context.TotalDays.HasValue)
+                    {
+                        <span>@context.TotalDays.Value.ToString("F2") days</span>
+                    }
+                    else if (context.TotalHours.HasValue)
+                    {
+                        <span>@context.TotalHours.Value.ToString("F2") hours</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Reason">@(context.Reason ?? "N/A")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.LeaveStatusName ?? "Unknown")">
+                        @(context.LeaveStatusName ?? "Unknown")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    @if (context.LeaveStatusName?.ToUpper() == "PENDING" && _accessLevel >= 2)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Check"
+                                     Color="Color.Success"
+                                     Size="Size.Small"
+                                     Title="Approve"
+                                     OnClick="@(() => OpenApprovalDialog(context, true))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                     Color="Color.Error"
+                                     Size="Size.Small"
+                                     Title="Reject"
+                                     OnClick="@(() => OpenApprovalDialog(context, false))" />
+                    }
+                    else if (context.LeaveStatusName?.ToUpper() != "PENDING")
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">No actions</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">View only</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private int _tenantId;
+    private int _userId;
+    private int _accessLevel = 0;
+    private int? _staffId;
+    private bool _isHR = false;
+    private bool _showAllRequests = false;
+    private string? _statusFilter;
+    private string? _requestTypeFilter;
+    private string? _searchTerm;
+    private DateTime? _fromDateFilter;
+    private DateTime? _toDateFilter;
+    private List<LeaveOtRequestDto> _allRequests = new();
+    private List<LeaveOtRequestDto> _requests = new();
+    private List<MasterDropdown> _requestTypes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                Navigation.NavigateTo("/dashboard");
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+            _isHR = roleClaim == "HR Admin" || roleClaim == "Super Admin";
+
+            _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Leave Approval", _tenantId);
+
+            // Get user's staff ID - this is required for managers to see their direct reports' requests
+            var userEntity = await UserService.GetByIdAsync(_userId, _tenantId);
+            if (userEntity != null && userEntity.StaffId.HasValue)
+            {
+                _staffId = userEntity.StaffId.Value;
+            }
+            else if (!_isHR)
+            {
+                // If not HR and no StaffId, show warning
+                Logger.LogWarning("User {UserId} does not have a StaffId linked. Cannot load approval requests.", _userId);
+                Snackbar.Add("Staff record not found. Please contact your administrator to link your user account to a staff record.", Severity.Warning);
+            }
+
+            // Load request types for filter
+            try
+            {
+                var requestTypes = await MasterDropdownService.GetByCategoryAsync("RequestType", _tenantId);
+                _requestTypes = requestTypes?.ToList() ?? new List<MasterDropdown>();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading request types");
+                _requestTypes = new List<MasterDropdown>();
+            }
+
+            await LoadRequestsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Leave Approval page");
+            Snackbar.Add("Error loading page. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadRequestsAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            IEnumerable<LeaveOtRequestDto> requests = new List<LeaveOtRequestDto>();
+
+            if (_isHR)
+            {
+                if (_showAllRequests)
+                {
+                    // HR can see ALL requests for the tenant
+                    try
+                    {
+                        Logger.LogInformation("Loading all requests for HR, TenantId: {TenantId}", _tenantId);
+                        requests = await LeaveOtService.GetByTenantIdAsync(_tenantId, includeInactive: false);
+                        Logger.LogInformation("Successfully loaded {Count} total requests", requests.Count());
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Error loading all requests for HR. Exception: {ExceptionMessage}", ex.Message);
+                        Snackbar.Add($"Error loading requests: {ex.Message}", Severity.Error);
+                    }
+                }
+                else
+                {
+                    // HR can see all pending requests that need HR approval
+                    try
+                    {
+                        Logger.LogInformation("Loading HR approval requests for TenantId: {TenantId}", _tenantId);
+                        requests = await LeaveOtService.GetPendingForHRAsync(_tenantId);
+                        Logger.LogInformation("Successfully loaded {Count} HR approval requests", requests.Count());
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Error loading HR pending requests. Exception: {ExceptionMessage}", ex.Message);
+                        Snackbar.Add($"Error loading HR approval requests: {ex.Message}", Severity.Error);
+                    }
+                }
+            }
+            else if (_staffId.HasValue)
+            {
+                if (_showAllRequests)
+                {
+                    // Manager can see all requests for their direct reports (all statuses)
+                    try
+                    {
+                        Logger.LogInformation("Loading all requests for ReportingManagerId: {StaffId}, TenantId: {TenantId}", _staffId.Value, _tenantId);
+                        var allManagerRequests = await UnitOfWork.LeaveOtRequest.GetByReportingManagerIdAsync(_staffId.Value, _tenantId);
+                        Logger.LogInformation("Total requests for ReportingManagerId {StaffId}: {Count}", _staffId.Value, allManagerRequests.Count());
+                        
+                        var dtos = new List<LeaveOtRequestDto>();
+                        foreach (var req in allManagerRequests)
+                        {
+                            try
+                            {
+                                var dto = await LeaveOtService.GetByIdAsync(req.RequestId, _tenantId);
+                                if (dto != null)
+                                {
+                                    dtos.Add(dto);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.LogWarning(ex, "Error mapping request {RequestId} to DTO", req.RequestId);
+                            }
+                        }
+                        requests = dtos;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Error loading all manager requests for StaffId: {StaffId}", _staffId.Value);
+                        Snackbar.Add($"Error loading requests: {ex.Message}", Severity.Warning);
+                    }
+                }
+                else
+                {
+                    // Manager can see only their direct reports' pending requests
+                    try
+                    {
+                        Logger.LogInformation("Loading pending requests for ReportingManagerId: {StaffId}, TenantId: {TenantId}", _staffId.Value, _tenantId);
+                        requests = await LeaveOtService.GetPendingByReportingManagerIdAsync(_staffId.Value, _tenantId);
+                        Logger.LogInformation("Found {Count} pending requests for ReportingManagerId: {StaffId}", requests.Count(), _staffId.Value);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Error loading manager pending requests for StaffId: {StaffId}", _staffId.Value);
+                        Snackbar.Add($"Error loading pending requests for approval: {ex.Message}", Severity.Warning);
+                    }
+                }
+            }
+            else
+            {
+                Logger.LogWarning("No staff ID found for user {UserId}. Cannot load approval requests.", _userId);
+                Snackbar.Add("Staff record not found. Please contact your administrator.", Severity.Warning);
+            }
+
+            // Store all requests before filtering
+            _allRequests = requests.ToList();
+            
+            // Apply filters
+            await ApplyFiltersAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error loading requests");
+            Snackbar.Add($"Error loading requests: {ex.Message}", Severity.Error);
+            _requests = new List<LeaveOtRequestDto>();
+            _allRequests = new List<LeaveOtRequestDto>();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private Task ApplyFiltersAsync()
+    {
+        _requests = _allRequests.ToList();
+
+        // Apply status filter
+        if (!string.IsNullOrEmpty(_statusFilter))
+        {
+            _requests = _requests.Where(r => r.LeaveStatusName?.ToUpper() == _statusFilter.ToUpper()).ToList();
+        }
+
+        // Apply request type filter
+        if (!string.IsNullOrEmpty(_requestTypeFilter))
+        {
+            _requests = _requests.Where(r => r.RequestTypeName == _requestTypeFilter).ToList();
+        }
+
+        // Apply date range filters - check if request overlaps with filter range
+        if (_fromDateFilter.HasValue || _toDateFilter.HasValue)
+        {
+            var fromDate = _fromDateFilter?.Date ?? DateTime.MinValue;
+            var toDate = _toDateFilter?.Date ?? DateTime.MaxValue;
+            
+            _requests = _requests.Where(r => 
+                // Check if request dates overlap with filter range
+                (r.FromDate.Date <= toDate && r.ToDate.Date >= fromDate)).ToList();
+        }
+
+        // Apply search term filter
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            var searchLower = _searchTerm.ToLower();
+            _requests = _requests.Where(r =>
+                (r.StaffName?.ToLower().Contains(searchLower) ?? false) ||
+                (r.LeaveTypeName?.ToLower().Contains(searchLower) ?? false) ||
+                (r.Reason?.ToLower().Contains(searchLower) ?? false)).ToList();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task OnSearchTermChanged(string? value)
+    {
+        _searchTerm = value;
+        await ApplyFiltersAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnStatusFilterChanged(string? value)
+    {
+        _statusFilter = value;
+        await ApplyFiltersAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnRequestTypeFilterChanged(string? value)
+    {
+        _requestTypeFilter = value;
+        await ApplyFiltersAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnFromDateFilterChanged(DateTime? date)
+    {
+        _fromDateFilter = date;
+        await ApplyFiltersAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnToDateFilterChanged(DateTime? date)
+    {
+        _toDateFilter = date;
+        await ApplyFiltersAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnShowAllChanged(bool value)
+    {
+        _showAllRequests = value;
+        await LoadRequestsAsync();
+        StateHasChanged();
+    }
+
+    private async Task OpenApprovalDialog(LeaveOtRequestDto request, bool isApproved)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Request"] = request,
+            ["IsApproved"] = isApproved
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<LeaveApprovalDialog>(
+            isApproved ? "Approve Request" : "Reject Request", 
+            parameters, 
+            options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is ApproveLeaveOtRequestDto approvalRequest)
+        {
+            await ApproveRequestAsync(approvalRequest);
+        }
+    }
+
+    private async Task ApproveRequestAsync(ApproveLeaveOtRequestDto request)
+    {
+        try
+        {
+            var ipAddress = HttpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+            await LeaveOtService.ApproveRequestAsync(request, _tenantId, _userId, _isHR, ipAddress);
+            
+            Snackbar.Add($"Request {(request.IsApproved ? "approved" : "rejected")} successfully!", Severity.Success);
+            await LoadRequestsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error approving request");
+            Snackbar.Add($"Error processing request: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        _statusFilter = null;
+        _requestTypeFilter = null;
+        _searchTerm = null;
+        _fromDateFilter = null;
+        _toDateFilter = null;
+        _showAllRequests = false;
+        await LoadRequestsAsync();
+        StateHasChanged();
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToUpper() switch
+        {
+            "PENDING" => Color.Warning,
+            "APPROVED" => Color.Success,
+            "REJECTED" => Color.Error,
+            "CANCELLED" => Color.Default,
+            _ => Color.Default
+        };
+    }
+}
+

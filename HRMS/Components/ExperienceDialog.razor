@@ -1,0 +1,138 @@
+@using HRMS.Core.Application.DTOs
+@using MudBlazor
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudTextField @bind-Value="@_experience.Company"
+                         Label="Company*"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="Company is required"
+                         Class="mb-3" />
+            <MudTextField @bind-Value="@_experience.Position"
+                         Label="Position*"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="Position is required"
+                         Class="mb-3" />
+            <MudDatePicker @bind-Date="@StartDate"
+                          Label="Start Date*"
+                          Variant="Variant.Outlined"
+                          DateFormat="dd-MM-yyyy"
+                          Required="true"
+                          Class="mb-3" />
+            <MudDatePicker @bind-Date="@EndDate"
+                          Label="End Date"
+                          Variant="Variant.Outlined"
+                          DateFormat="dd-MM-yyyy"
+                          Class="mb-3" />
+            <MudTextField Value="@_experience.TotalExperience"
+                         Label="Total Experience"
+                         Variant="Variant.Outlined"
+                         ReadOnly="true"
+                         Placeholder="Auto-calculated from dates"
+                         Class="mb-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!isValid)">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public ExperienceDetailDto? Experience { get; set; }
+
+    private MudForm? form;
+    private bool isValid;
+    private ExperienceDetailDto _experience = new();
+
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+
+    private DateTime? StartDate
+    {
+        get => _startDate;
+        set
+        {
+            _startDate = value;
+            _experience.StartDate = value;
+            RecalculateTotalExperience();
+        }
+    }
+
+    private DateTime? EndDate
+    {
+        get => _endDate;
+        set
+        {
+            _endDate = value;
+            _experience.EndDate = value;
+            RecalculateTotalExperience();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        if (Experience != null)
+        {
+            _experience = new ExperienceDetailDto
+            {
+                Id              = Experience.Id,
+                Company         = Experience.Company,
+                Position        = Experience.Position,
+                StartDate       = Experience.StartDate,
+                EndDate         = Experience.EndDate,
+                TotalExperience = Experience.TotalExperience
+            };
+        }
+
+        _startDate = _experience.StartDate;
+        _endDate   = _experience.EndDate;
+
+        // Recalculate on open in case dates are already set
+        if (_startDate.HasValue)
+            RecalculateTotalExperience();
+    }
+
+    private void RecalculateTotalExperience()
+    {
+        if (!_startDate.HasValue)
+        {
+            _experience.TotalExperience = string.Empty;
+            return;
+        }
+
+        var end = _endDate ?? DateTime.Today;
+
+        if (end < _startDate.Value)
+        {
+            _experience.TotalExperience = "End date must be after start date";
+            return;
+        }
+
+        int years  = end.Year  - _startDate.Value.Year;
+        int months = end.Month - _startDate.Value.Month;
+
+        if (months < 0) { years--; months += 12; }
+
+        _experience.TotalExperience = (years, months) switch
+        {
+            (0, 0) => "Less than 1 month",
+            (0, _) => $"{months} month{(months > 1 ? "s" : "")}",
+            (_, 0) => $"{years} year{(years  > 1 ? "s" : "")}",
+            _      => $"{years} year{(years  > 1 ? "s" : "")}, {months} month{(months > 1 ? "s" : "")}"
+        };
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+
+    private void Save()
+    {
+        if (isValid)
+            MudDialog?.Close(DialogResult.Ok(_experience));
+    }
+}

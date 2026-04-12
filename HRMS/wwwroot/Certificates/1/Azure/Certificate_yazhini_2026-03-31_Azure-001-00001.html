@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificate of Completion - yazhini</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 0;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .certificate {
+            background: white;
+            width: 1000px;
+            min-height: 700px;
+            padding: 40px;
+            position: relative;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .border-outer {
+            border: 3px solid #1a237e;
+            padding: 20px;
+            height: 100%;
+        }
+        .border-inner {
+            border: 1px solid #1a237e;
+            padding: 30px;
+            text-align: center;
+            min-height: 580px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .header {
+            margin-bottom: 20px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1a237e;
+            margin-bottom: 10px;
+        }
+        .title {
+            font-size: 42px;
+            font-weight: bold;
+            color: #1a237e;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin: 20px 0;
+        }
+        .subtitle {
+            font-size: 18px;
+            color: #555;
+            margin-bottom: 20px;
+        }
+        .recipient-name {
+            font-size: 36px;
+            font-weight: bold;
+            color: #333;
+            border-bottom: 2px solid #1a237e;
+            display: inline-block;
+            padding: 10px 40px;
+            margin: 20px 0;
+        }
+        .employee-code {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .course-info {
+            font-size: 18px;
+            color: #444;
+            margin: 20px 0;
+            line-height: 1.8;
+        }
+        .course-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a237e;
+        }
+        .details-row {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .detail-item {
+            text-align: center;
+        }
+        .detail-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+        }
+        .detail-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+        .signatures {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 40px;
+            padding-top: 20px;
+        }
+        .signature {
+            text-align: center;
+            min-width: 200px;
+        }
+        .signature-line {
+            border-top: 1px solid #333;
+            margin-top: 60px;
+            padding-top: 10px;
+        }
+        .signature-name {
+            font-weight: bold;
+            color: #333;
+        }
+        .signature-title {
+            font-size: 12px;
+            color: #666;
+        }
+        .qr-section {
+            position: absolute;
+            bottom: 60px;
+            right: 60px;
+        }
+        .qr-code {
+            width: 80px;
+            height: 80px;
+        }
+        .serial-number {
+            font-size: 10px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #1a237e;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .print-btn:hover {
+            background: #303f9f;
+        }
+        @media print {
+            .print-btn {
+                display: none;
+            }
+            body {
+                background: white;
+                padding: 0;
+            }
+            .certificate {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-btn" onclick="window.print()">Download / Print Certificate</button>
+
+    <div class="certificate">
+        <div class="border-outer">
+            <div class="border-inner">
+                <div class="header">
+                    <div class="logo">HRMS Training Management System</div>
+                    <div class="title">Certificate of Completion</div>
+                    <div class="subtitle">This is to certify that</div>
+                </div>
+
+                <div>
+                    <div class="recipient-name">yazhini</div>
+                    <div class="employee-code">Employee Code: EMP0010002</div>
+                </div>
+
+                <div class="course-info">
+                    <p>has successfully completed the training course</p>
+                    <p class="course-name">Azure 01 course</p>
+                    <p>Course Code: Azure</p>
+                </div>
+
+                <div class="details-row">
+                    <div class="detail-item">
+                        <div class="detail-label">Course Period</div>
+                        <div class="detail-value">31 Mar 2026 - 31 Mar 2026</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Score</div>
+                        <div class="detail-value">88.0%</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Attendance</div>
+                        <div class="detail-value">0.0%</div>
+                    </div>
+                </div>
+
+                <div class="signatures">
+                    <div class="signature">
+                        <div class="signature-line">
+                            <div class="signature-name">priya</div>
+                            <div class="signature-title">Course Trainer</div>
+                        </div>
+                    </div>
+                    <div class="signature">
+                        <div class="signature-line">
+                            <div class="signature-name">HR Manager</div>
+                            <div class="signature-title">Human Resources</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="qr-section">
+                    <img src="/Certificates/1/Azure/qr_EMP0010002_1.png" alt="QR Code" class="qr-code" />
+                    <div class="serial-number">Azure-001-00001</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

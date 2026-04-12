@@ -1,0 +1,170 @@
+@page "/register-company"
+@page "/signup"
+@layout BlankLayout
+@using System.ComponentModel.DataAnnotations
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject ICompanyRegistrationService RegistrationService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IConfiguration Configuration
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="d-flex justify-center align-center" Style="min-height: 100vh;">
+    <MudPaper Elevation="3" Class="pa-6" Style="width: 100%; max-width: 600px;">
+        <MudText Typo="Typo.h5" Align="Align.Center" Class="mb-4">Register Your Company</MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-4" Style="color: #666;">
+            Create a new account to get started with HRMS & TMS
+        </MudText>
+
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudTextField @bind-Value="request.CompanyName"
+                         Label="Company Name"
+                         Variant="Variant.Outlined"
+                         FullWidth="true"
+                         Required="true"
+                         RequiredError="Company name is required"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="request.Domain"
+                         Label="Domain (Optional)"
+                         Variant="Variant.Outlined"
+                         FullWidth="true"
+                         Placeholder="e.g., example.com"
+                         HelperText="Your company's domain name"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="request.FullName"
+                         Label="Full Name"
+                         Variant="Variant.Outlined"
+                         FullWidth="true"
+                         Required="true"
+                         RequiredError="Full name is required"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="request.Email"
+                         Label="Email"
+                         Variant="Variant.Outlined"
+                         FullWidth="true"
+                         Required="true"
+                         RequiredError="Email is required"
+                         Validation="@(new EmailAddressAttribute() { ErrorMessage = "Invalid email address" })"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="request.Password"
+                         Label="Password"
+                         Variant="Variant.Outlined"
+                         FullWidth="true"
+                         InputType="@passwordInputType"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@passwordIcon"
+                         OnAdornmentClick="TogglePasswordVisibility"
+                         Required="true"
+                         RequiredError="Password is required"
+                         Class="mb-3" />
+
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      FullWidth="true"
+                      Size="Size.Large"
+                      Disabled="@(!isValid || isLoading)"
+                      OnClick="HandleRegistration"
+                      Class="mb-3">
+                @if (isLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Registering...</span>
+                }
+                else
+                {
+                    <span>Register Company</span>
+                }
+            </MudButton>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-3">@errorMessage</MudAlert>
+            }
+
+            @if (!string.IsNullOrEmpty(successMessage))
+            {
+                <MudAlert Severity="Severity.Success" Class="mb-3">@successMessage</MudAlert>
+            }
+
+            <div class="d-flex justify-center mt-4">
+                <MudText Typo="Typo.body2">
+                    Already have an account?
+                    <MudLink Href="/signin" Typo="Typo.body2" Color="Color.Primary" Style="font-weight: 500;">Sign in</MudLink>
+                </MudText>
+            </div>
+        </MudForm>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? form;
+    private bool isValid;
+    private bool isLoading;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private CompanyRegistrationRequest request = new();
+    private InputType passwordInputType = InputType.Password;
+    private string passwordIcon = Icons.Material.Filled.VisibilityOff;
+
+    private void TogglePasswordVisibility()
+    {
+        if (passwordInputType == InputType.Password)
+        {
+            passwordInputType = InputType.Text;
+            passwordIcon = Icons.Material.Filled.Visibility;
+        }
+        else
+        {
+            passwordInputType = InputType.Password;
+            passwordIcon = Icons.Material.Filled.VisibilityOff;
+        }
+    }
+
+    private async Task HandleRegistration()
+    {
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+        isLoading = true;
+
+        try
+        {
+            var result = await RegistrationService.RegisterCompanyAsync(request);
+
+            if (result.Success)
+            {
+                successMessage = result.Message ?? "Company registered successfully! Please check your email to verify your account.";
+                Snackbar.Add(successMessage, Severity.Success);
+                
+                // Redirect to sign in after 3 seconds
+                await Task.Delay(3000);
+                Navigation.NavigateTo("/signin");
+            }
+            else
+            {
+                errorMessage = result.Message ?? "Registration failed. Please try again.";
+                Snackbar.Add(errorMessage, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+            Snackbar.Add(errorMessage, Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
+
+
+
+
+
+
+
+

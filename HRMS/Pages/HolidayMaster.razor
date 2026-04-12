@@ -1,0 +1,372 @@
+@page "/hrms/leave/holidays"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IHolidayMasterService HolidayMasterService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<HolidayMaster> Logger
+@inject IDialogService DialogService
+
+<PageTitle>Holiday Master</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Holiday Master</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage company holidays</MudText>
+        </div>
+        @if (_accessLevel >= 2)
+        {
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      Size="Size.Medium"
+                      Style="box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                      OnClick="OpenCreateDialog">
+                Add Holiday
+            </MudButton>
+        }
+    </div>
+
+    <!-- Search and Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3">
+                <MudTextField Value="@_searchTerm" 
+                             ValueChanged="@OnSearchChangedCallback"
+                             Label="Search by Holiday Name" 
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             Immediate="true"
+                             FullWidth="@true" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudDatePicker Date="@_startDate"
+                             DateChanged="OnStartDateChanged"
+                             Label="From Date"
+                             Variant="Variant.Outlined"
+                             Clearable="true"
+                             FullWidth="@true" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudDatePicker Date="@_endDate"
+                             DateChanged="OnEndDateChanged"
+                             Label="To Date"
+                             Variant="Variant.Outlined"
+                             Clearable="true"
+                             FullWidth="@true" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect Value="@_selectedStatus" 
+                          ValueChanged="@OnStatusChangedCallback"
+                          Label="Status" 
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="bool?">
+                    <MudSelectItem Value="@((bool?)true)">Active</MudSelectItem>
+                    <MudSelectItem Value="@((bool?)false)">Inactive</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" 
+                              Color="Color.Error" 
+                              OnClick="ClearFilters"
+                              FullWidth="@true">
+                        Clear Filters
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_pagedResult == null || !_pagedResult.Items.Any())
+    {
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.body1">No holidays found.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+            <MudTable Items="_pagedResult.Items" Hover="true" Dense="true" Striped="true" Style="background-color: white;">
+                <HeaderContent>
+                    <MudTh>Holiday Date</MudTh>
+                    <MudTh>Holiday Name</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Holiday Date">@context.HolidayDate.ToString("MMM dd, yyyy")</MudTd>
+                    <MudTd DataLabel="Holiday Name">@context.HolidayName</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                            @(context.IsActive ? "Active" : "Inactive")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        @if (_accessLevel >= 2)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                         Color="Color.Primary"
+                                         Size="Size.Small"
+                                         Title="Edit"
+                                         OnClick="@(() => OpenEditDialog(context))" />
+                        }
+                        @if (_accessLevel >= 3)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                         Color="Color.Error"
+                                         Size="Size.Small"
+                                         Title="Delete"
+                                         OnClick="@(() => DeleteHoliday(context))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+            
+            <!-- Pagination -->
+            <div class="d-flex align-center justify-space-between pa-3" style="background-color: #f5f5f5; border-top: 1px solid #e0e0e0;">
+                <div class="d-flex align-center" style="gap: 8px;">
+                    <MudText Typo="Typo.body2">Rows per page:</MudText>
+                    <MudSelect T="int" Value="@_pageSize" ValueChanged="OnPageSizeChanged" Dense="true" Style="width:80px;" Variant="Variant.Outlined">
+                        <MudSelectItem T="int" Value="10">10</MudSelectItem>
+                        <MudSelectItem T="int" Value="25">25</MudSelectItem>
+                        <MudSelectItem T="int" Value="50">50</MudSelectItem>
+                        <MudSelectItem T="int" Value="100">100</MudSelectItem>
+                    </MudSelect>
+                </div>
+                <MudText Typo="Typo.body2" Color="Color.Default">
+                    Showing <strong>@((_pageNumber - 1) * _pageSize + 1)</strong> - <strong>@(Math.Min(_pageNumber * _pageSize, _pagedResult.TotalCount))</strong> of <strong>@_pagedResult.TotalCount</strong> holidays
+                </MudText>
+                <MudPagination Count="@((int)Math.Ceiling((double)_pagedResult.TotalCount / _pageSize))"
+                               Selected="@_pageNumber"
+                               SelectedChanged="OnPageChanged"
+                               ShowFirstButton="true"
+                               ShowLastButton="true" />
+            </div>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private PagedResult<HolidayMasterDto>? _pagedResult;
+    private bool _isLoading = true;
+    private int _tenantId;
+    private int _userId;
+    private int _accessLevel = 0;
+    
+    // Pagination
+    private int _pageNumber = 1;
+    private int _pageSize = 25;
+    
+    // Filters
+    private string? _searchTerm;
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private bool? _selectedStatus;
+    
+    // Debounce timer for search
+    private System.Threading.Timer? _searchDebounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                Navigation.NavigateTo("/dashboard");
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+
+            _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Leave Configuration", _tenantId);
+
+            await LoadHolidaysAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Holiday Master page");
+            Snackbar.Add("Error loading page. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadHolidaysAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _pagedResult = await HolidayMasterService.GetPagedAsync(_tenantId, _pageNumber, _pageSize, _searchTerm, _startDate, _endDate, _selectedStatus);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading holidays");
+            Snackbar.Add($"Error loading holidays: {ex.Message}", Severity.Error);
+            _pagedResult = null;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _pageNumber = page;
+        await LoadHolidaysAsync();
+    }
+
+    private async Task OnPageSizeChanged(int pageSize)
+    {
+        _pageSize = pageSize;
+        _pageNumber = 1;
+        await LoadHolidaysAsync();
+    }
+
+    private async Task OnSearchChanged(string? value)
+    {
+        _searchTerm = value;
+        _pageNumber = 1;
+        
+        // Debounce search - wait 500ms after user stops typing
+        _searchDebounceTimer?.Dispose();
+        _searchDebounceTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadHolidaysAsync();
+                StateHasChanged();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private EventCallback<string?> OnSearchChangedCallback => EventCallback.Factory.Create<string?>(this, OnSearchChanged);
+
+    private async Task OnStartDateChanged(DateTime? date)
+    {
+        _startDate = date;
+        _pageNumber = 1;
+        await LoadHolidaysAsync();
+    }
+
+    private async Task OnEndDateChanged(DateTime? date)
+    {
+        _endDate = date;
+        _pageNumber = 1;
+        await LoadHolidaysAsync();
+    }
+
+    private async Task OnStatusChanged(bool? value)
+    {
+        _selectedStatus = value;
+        _pageNumber = 1;
+        await LoadHolidaysAsync();
+    }
+
+    private EventCallback<bool?> OnStatusChangedCallback => EventCallback.Factory.Create<bool?>(this, OnStatusChanged);
+
+    private async Task ClearFilters()
+    {
+        _searchTerm = null;
+        _startDate = null;
+        _endDate = null;
+        _selectedStatus = null;
+        _pageNumber = 1;
+        await LoadHolidaysAsync();
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters 
+        { 
+            ["Holiday"] = (HolidayMasterDto?)null,
+            ["TenantId"] = _tenantId,
+            ["UserId"] = _userId
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<HolidayDialog>("Add Holiday", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is HolidayMasterDto)
+        {
+            await LoadHolidaysAsync();
+        }
+    }
+
+    private async Task OpenEditDialog(HolidayMasterDto holiday)
+    {
+        var parameters = new DialogParameters 
+        { 
+            ["Holiday"] = holiday,
+            ["TenantId"] = _tenantId,
+            ["UserId"] = _userId
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<HolidayDialog>("Edit Holiday", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is HolidayMasterDto)
+        {
+            await LoadHolidaysAsync();
+        }
+    }
+
+    private async Task DeleteHoliday(HolidayMasterDto holiday)
+    {
+        var parameters = new DialogParameters { ["Message"] = $"Are you sure you want to delete holiday '{holiday.HolidayName}' on {holiday.HolidayDate:MMM dd, yyyy}?" };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                await HolidayMasterService.DeleteAsync(holiday.HolidayId, _tenantId, _userId);
+                Snackbar.Add("Holiday deleted successfully", Severity.Success);
+                await LoadHolidaysAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting holiday");
+                Snackbar.Add($"Error deleting holiday: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchDebounceTimer?.Dispose();
+    }
+}
+

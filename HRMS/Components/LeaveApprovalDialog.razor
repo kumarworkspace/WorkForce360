@@ -1,0 +1,84 @@
+@using HRMS.Core.Application.DTOs
+@using MudBlazor
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(IsApproved ? "Approve Request" : "Reject Request")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudText Typo="Typo.body1" Class="mb-3">
+                <strong>Staff:</strong> @Request?.StaffName<br />
+                <strong>Type:</strong> @Request?.RequestTypeName<br />
+                <strong>From:</strong> @Request?.FromDate.ToString("MMM dd, yyyy")<br />
+                <strong>To:</strong> @Request?.ToDate.ToString("MMM dd, yyyy")<br />
+                @if (Request?.TotalDays.HasValue == true)
+                {
+                    <strong>Days:</strong> @Request.TotalDays.Value.ToString("F2")<br />
+                }
+                @if (Request?.TotalHours.HasValue == true)
+                {
+                    <strong>Hours:</strong> @Request.TotalHours.Value.ToString("F2")<br />
+                }
+                <strong>Reason:</strong> @(Request?.Reason ?? "N/A")
+            </MudText>
+            <MudTextField @bind-Value="@_comments"
+                         Label="Comments"
+                         Variant="Variant.Outlined"
+                         Lines="3"
+                         FullWidth="true" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="@(IsApproved ? Color.Success : Color.Error)" 
+                  Variant="Variant.Filled" 
+                  OnClick="Confirm" 
+                  Disabled="@(!isValid)">
+            @(IsApproved ? "Approve" : "Reject")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public LeaveOtRequestDto? Request { get; set; }
+    [Parameter] public bool IsApproved { get; set; }
+
+    private MudForm? form;
+    private bool isValid;
+    private string? _comments;
+
+    protected override void OnInitialized()
+    {
+        if (Request == null)
+        {
+            MudDialog?.Cancel();
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+
+    private void Confirm()
+    {
+        if (Request == null) return;
+
+        var approvalRequest = new ApproveLeaveOtRequestDto
+        {
+            RequestId = Request.RequestId,
+            IsApproved = IsApproved,
+            Comments = _comments
+        };
+
+        MudDialog?.Close(DialogResult.Ok(approvalRequest));
+    }
+}
+
+
+
+
+

@@ -1,0 +1,140 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using MudBlazor
+@using Microsoft.AspNetCore.Components
+@inject IStaffService StaffService
+@inject IMasterDropdownService MasterDropdownService
+@inject ISnackbar Snackbar
+@inject ILogger<DocumentUploadDialog> Logger
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudSelect @bind-Value="@_selectedDocumentType" 
+                      Label="Document Type" 
+                      Variant="Variant.Outlined" 
+                      Required="true"
+                      RequiredError="Document type is required"
+                      T="string">
+                @foreach (var docType in _documentTypes)
+                {
+                    <MudSelectItem Value="@docType.Name">@docType.Name</MudSelectItem>
+                }
+            </MudSelect>
+            
+            <InputFile OnChange="HandleFileSelected" 
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      class="d-none"
+                      id="fileInput" />
+            <MudButton HtmlTag="label" 
+                      Variant="Variant.Filled" 
+                      Color="Color.Primary" 
+                      StartIcon="@Icons.Material.Filled.CloudUpload"
+                      for="fileInput"
+                      FullWidth="true">
+                Select File
+            </MudButton>
+
+            @if (_selectedFile != null)
+            {
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    Selected: @_selectedFile.Name (@(_selectedFile.Size / 1024) KB)
+                </MudText>
+            }
+
+            @if (_isUploading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mt-2" />
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_isUploading">Cancel</MudButton>
+        <MudButton Color="Color.Primary" 
+                  Variant="Variant.Filled" 
+                  OnClick="Upload" 
+                  Disabled="@(!isValid || _selectedFile == null || _isUploading || string.IsNullOrEmpty(_selectedDocumentType))">
+            @if (_isUploading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Uploading...</span>
+            }
+            else
+            {
+                <span>Upload</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public int StaffId { get; set; }
+    [Parameter] public int TenantId { get; set; }
+    [Parameter] public int UserId { get; set; }
+
+    private MudForm? form;
+    private bool isValid;
+    private bool _isUploading = false;
+    private string? _selectedDocumentType;
+    private IBrowserFile? _selectedFile;
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _documentTypes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _documentTypes = (await MasterDropdownService.GetByCategoryAsync("DocumentType", TenantId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading document types");
+            Snackbar.Add("Error loading document types", Severity.Error);
+        }
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        if (e.File != null)
+        {
+            _selectedFile = e.File;
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+
+    private async Task Upload()
+    {
+        if (_selectedFile == null || string.IsNullOrEmpty(_selectedDocumentType))
+        {
+            Snackbar.Add("Please select a file and document type", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _isUploading = true;
+            StateHasChanged();
+
+            using var stream = _selectedFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB max
+            await StaffService.UploadDocumentAsync(StaffId, TenantId, _selectedDocumentType, stream, _selectedFile.Name, UserId);
+            
+            Snackbar.Add("Document uploaded successfully", Severity.Success);
+            MudDialog?.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error uploading document");
+            Snackbar.Add($"Error uploading document: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUploading = false;
+            StateHasChanged();
+        }
+    }
+}
+

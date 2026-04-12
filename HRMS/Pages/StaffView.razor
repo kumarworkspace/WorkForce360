@@ -1,0 +1,517 @@
+@page "/hrms/employees/view/{StaffId:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IStaffService StaffService
+@inject ICourseParticipantService CourseParticipantService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>View Employee - @(_staff?.Name ?? "Employee")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <MudText Typo="Typo.h4">Employee Profile</MudText>
+        <MudButton Variant="Variant.Text" 
+                  StartIcon="@Icons.Material.Filled.ArrowBack" 
+                  OnClick="NavigateBack">
+            Back to List
+        </MudButton>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_staff == null)
+    {
+        <MudAlert Severity="Severity.Error">Employee not found.</MudAlert>
+    }
+    else
+    {
+        <!-- Employee Header Card with Photo -->
+        <MudPaper Elevation="3" Class="pa-6 mb-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+            <MudGrid>
+                <MudItem xs="12" md="3" class="d-flex justify-center align-center">
+                    @if (!string.IsNullOrEmpty(_staff.Photo))
+                    {
+                        <img src="/@_staff.Photo.Replace('\\', '/')" 
+                             alt="@_staff.Name" 
+                             style="width: 180px; height: 220px; object-fit: cover; border-radius: 8px; border: 4px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.2);" />
+                    }
+                    else
+                    {
+                        <MudAvatar Size="Size.Large" Style="width: 180px; height: 220px; border-radius: 8px; border: 4px solid white;">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" />
+                        </MudAvatar>
+                    }
+                </MudItem>
+                <MudItem xs="12" md="9">
+                    <MudText Typo="Typo.h3" Style="color: white; font-weight: bold; margin-bottom: 8px;">@_staff.Name</MudText>
+                    <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.9); margin-bottom: 4px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" Style="margin-right: 8px;" />
+                        Employee Code: @_staff.EmployeeCode
+                    </MudText>
+                    <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.9); margin-bottom: 4px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Style="margin-right: 8px;" />
+                        @_staff.Email
+                    </MudText>
+                    @if (!string.IsNullOrEmpty(_staff.PhoneNumber))
+                    {
+                        <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.9); margin-bottom: 4px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Style="margin-right: 8px;" />
+                            @_staff.PhoneNumber
+                        </MudText>
+                    }
+                    <div class="mt-3">
+                        @if (!string.IsNullOrEmpty(_staff.EmploymentStatusName))
+                        {
+                            <MudChip T="string" Size="Size.Medium" Color="Color.Default" Style="background: white;">
+                                @_staff.EmploymentStatusName
+                            </MudChip>
+                        }
+                    </div>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <!-- Information Cards -->
+        <MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Variant="Variant.Pills">
+            <MudTabPanel Text="Personal Information">
+                <MudGrid Class="mt-4">
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="2" Class="pa-4 mb-3">
+                            <MudText Typo="Typo.h6" Class="mb-3" Color="Color.Primary">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-2" />
+                                Basic Information
+                            </MudText>
+                            <MudDivider Class="mb-3" />
+                            <MudGrid>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Full Name</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@_staff.Name</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Employee Code</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@_staff.EmployeeCode</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Date of Birth</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@(_staff.DateOfBirth?.ToString("dd MMMM yyyy") ?? "-")</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Gender</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@(_staff.GenderName ?? "-")</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Company</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@(_staff.Company ?? "-")</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Identity Card / Passport</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@(_staff.IdentityCard ?? "-")</MudText>
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Address</MudText>
+                                    <MudText Typo="Typo.body1">@(_staff.Address ?? "-")</MudText>
+                                </MudItem>
+                            </MudGrid>
+                        </MudCard>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="2" Class="pa-4 mb-3">
+                            <MudText Typo="Typo.h6" Class="mb-3" Color="Color.Primary">
+                                <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />
+                                Employment Details
+                            </MudText>
+                            <MudDivider Class="mb-3" />
+                            <MudGrid>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Division</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@_staff.Division</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Department</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@_staff.Department</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Position</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@_staff.Position</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Employment Status</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@(_staff.EmploymentStatusName ?? "-")</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Date Joined</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@(_staff.DateJoined?.ToString("dd MMMM yyyy") ?? "-")</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Default">Retirement Date</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@(_staff.RetirementDate?.ToString("dd MMMM yyyy") ?? "-")</MudText>
+                                </MudItem>
+                            </MudGrid>
+                        </MudCard>
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Education">
+                <div class="mt-4">
+                    @if (_staff.EducationDetails.Any())
+                    {
+                        <MudTimeline Align="Align.Alternate">
+                            @foreach (var edu in _staff.EducationDetails.OrderByDescending(e => e.EndDate ?? e.StartDate ?? DateTime.MinValue))
+                            {
+                                <MudTimelineItem Size="Size.Large" Color="Color.Primary">
+                                    <MudCard Elevation="2" Class="pa-4">
+                                        <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-2">
+                                            @(edu.Qualification ?? "Qualification")
+                                        </MudText>
+                                        <MudText Typo="Typo.subtitle1" Class="mb-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Small" Class="mr-2" />
+                                            @(edu.Institution ?? "-")
+                                        </MudText>
+                                        <MudGrid Class="mt-2">
+                                            <MudItem xs="12" md="4">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">Start Date</MudText>
+                                                <MudText Typo="Typo.body2">@(edu.StartDate?.ToString("MMM yyyy") ?? "-")</MudText>
+                                            </MudItem>
+                                            <MudItem xs="12" md="4">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">End Date</MudText>
+                                                <MudText Typo="Typo.body2">@(edu.EndDate?.ToString("MMM yyyy") ?? "-")</MudText>
+                                            </MudItem>
+                                            @if (edu.YearOfPassing.HasValue)
+                                            {
+                                                <MudItem xs="12" md="2">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Year</MudText>
+                                                    <MudText Typo="Typo.body2">@edu.YearOfPassing.Value</MudText>
+                                                </MudItem>
+                                            }
+                                            @if (!string.IsNullOrEmpty(edu.GradeOrPercentage))
+                                            {
+                                                <MudItem xs="12" md="2">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Grade</MudText>
+                                                    <MudText Typo="Typo.body2">@edu.GradeOrPercentage</MudText>
+                                                </MudItem>
+                                            }
+                                        </MudGrid>
+                                    </MudCard>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    }
+                    else
+                    {
+                        <MudCard Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.body2" Color="Color.Default" Class="text-center">No education details available.</MudText>
+                        </MudCard>
+                    }
+                </div>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Experience">
+                <div class="mt-4">
+                    @if (_staff.ExperienceDetails.Any())
+                    {
+                        <MudTimeline Align="Align.Alternate">
+                            @foreach (var exp in _staff.ExperienceDetails.OrderByDescending(e => e.EndDate ?? e.StartDate ?? DateTime.MinValue))
+                            {
+                                <MudTimelineItem Size="Size.Large" Color="Color.Success">
+                                    <MudCard Elevation="2" Class="pa-4">
+                                        <MudText Typo="Typo.h6" Color="Color.Success" Class="mb-2">
+                                            @(exp.Position ?? "Position")
+                                        </MudText>
+                                        <MudText Typo="Typo.subtitle1" Class="mb-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" Class="mr-2" />
+                                            @(exp.Company ?? "-")
+                                        </MudText>
+                                        <MudGrid Class="mt-2">
+                                            <MudItem xs="12" md="4">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">From</MudText>
+                                                <MudText Typo="Typo.body2">@(exp.StartDate?.ToString("MMM yyyy") ?? "-")</MudText>
+                                            </MudItem>
+                                            <MudItem xs="12" md="4">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">To</MudText>
+                                                <MudText Typo="Typo.body2">@(exp.EndDate?.ToString("MMM yyyy") ?? "Present")</MudText>
+                                            </MudItem>
+                                            @if (!string.IsNullOrEmpty(exp.TotalExperience))
+                                            {
+                                                <MudItem xs="12" md="4">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Duration</MudText>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@exp.TotalExperience</MudChip>
+                                                </MudItem>
+                                            }
+                                        </MudGrid>
+                                    </MudCard>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    }
+                    else
+                    {
+                        <MudCard Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.body2" Color="Color.Default" Class="text-center">No experience details available.</MudText>
+                        </MudCard>
+                    }
+                </div>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Documents">
+                <div class="mt-4">
+                    <!-- Legal Documents Section -->
+                    @if (_staff.LegalDocuments.Any())
+                    {
+                        <MudText Typo="Typo.h6" Class="mb-3" Color="Color.Primary">
+                            <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Class="mr-2" />
+                            Legal Documents
+                        </MudText>
+                        <MudGrid Class="mb-4">
+                            @foreach (var doc in _staff.LegalDocuments)
+                            {
+                                <MudItem xs="12" md="4">
+                                    <MudCard Elevation="2" Class="pa-4" Style="height: 100%;">
+                                        <div class="d-flex align-center mb-3">
+                                            <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Large" Color="Color.Primary" Class="mr-3" />
+                                            <div style="flex: 1;">
+                                                <MudText Typo="Typo.subtitle1" Class="mb-1">@doc.DocumentType</MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@doc.FileName</MudText>
+                                            </div>
+                                        </div>
+                                        <MudDivider Class="my-2" />
+                                        <MudButton Variant="Variant.Outlined"
+                                                  Color="Color.Primary"
+                                                  Size="Size.Small"
+                                                  StartIcon="@Icons.Material.Filled.Download"
+                                                  FullWidth="true"
+                                                  OnClick="@(() => DownloadDocument(doc))">
+                                            Download
+                                        </MudButton>
+                                    </MudCard>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    }
+
+                    <!-- Training Certificates Section -->
+                    <MudText Typo="Typo.h6" Class="mb-3" Color="Color.Success">
+                        <MudIcon Icon="@Icons.Material.Filled.WorkspacePremium" Size="Size.Small" Class="mr-2" />
+                        Training Certificates
+                    </MudText>
+                    @if (_certificates.Any())
+                    {
+                        <MudGrid>
+                            @foreach (var cert in _certificates)
+                            {
+                                <MudItem xs="12" md="4">
+                                    <MudCard Elevation="2" Class="pa-4" Style="height: 100%; border-left: 4px solid #4caf50;">
+                                        <div class="d-flex align-center mb-3">
+                                            <MudIcon Icon="@Icons.Material.Filled.CardMembership" Size="Size.Large" Color="Color.Success" Class="mr-3" />
+                                            <div style="flex: 1;">
+                                                <MudText Typo="Typo.subtitle1" Class="mb-1" Style="font-weight: 600;">@cert.CourseName</MudText>
+                                                @if (!string.IsNullOrEmpty(cert.CourseCode))
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@cert.CourseCode</MudChip>
+                                                }
+                                            </div>
+                                        </div>
+                                        <MudDivider Class="my-2" />
+                                        <MudGrid Class="mt-2">
+                                            <MudItem xs="6">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">Serial Number</MudText>
+                                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@(cert.CertificateSerialNumber ?? "-")</MudText>
+                                            </MudItem>
+                                            <MudItem xs="6">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">Course Date</MudText>
+                                                <MudText Typo="Typo.body2">@cert.CourseStartDate.ToString("dd MMM yyyy")</MudText>
+                                            </MudItem>
+                                            @if (cert.IssuedDate.HasValue)
+                                            {
+                                                <MudItem xs="12">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Issued Date</MudText>
+                                                    <MudText Typo="Typo.body2">@cert.IssuedDate.Value.ToString("dd MMM yyyy")</MudText>
+                                                </MudItem>
+                                            }
+                                        </MudGrid>
+                                        <div class="d-flex gap-2 mt-3">
+                                            <MudButton Variant="Variant.Filled"
+                                                      Color="Color.Primary"
+                                                      Size="Size.Small"
+                                                      StartIcon="@Icons.Material.Filled.Visibility"
+                                                      OnClick="@(() => ViewCertificate(cert))">
+                                                View
+                                            </MudButton>
+                                            <MudButton Variant="Variant.Outlined"
+                                                      Color="Color.Success"
+                                                      Size="Size.Small"
+                                                      StartIcon="@Icons.Material.Filled.Download"
+                                                      OnClick="@(() => DownloadCertificate(cert))">
+                                                Download
+                                            </MudButton>
+                                        </div>
+                                    </MudCard>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    }
+                    else
+                    {
+                        <MudCard Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.body2" Color="Color.Default" Class="text-center">No training certificates available.</MudText>
+                        </MudCard>
+                    }
+
+                    @if (!_staff.LegalDocuments.Any() && !_certificates.Any())
+                    {
+                        <MudCard Elevation="2" Class="pa-4 mt-4">
+                            <MudText Typo="Typo.body2" Color="Color.Default" Class="text-center">No documents available.</MudText>
+                        </MudCard>
+                    }
+                </div>
+            </MudTabPanel>
+        </MudTabs>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int StaffId { get; set; }
+
+    private bool _isLoading = true;
+    private int _activeTabIndex = 0;
+    private int _tenantId;
+    private int _userId;
+    private StaffDto? _staff;
+    private List<StaffCertificateDto> _certificates = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+        {
+            Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+            Navigation.NavigateTo("/hrms/employees");
+            return;
+        }
+
+        _tenantId = int.Parse(tenantIdClaim);
+        _userId = int.Parse(userIdClaim);
+
+        await LoadStaffAsync();
+        
+        _isLoading = false;
+    }
+
+    private async Task LoadStaffAsync()
+    {
+        try
+        {
+            _staff = await StaffService.GetByIdAsync(StaffId, _tenantId);
+            if (_staff == null)
+            {
+                Snackbar.Add("Staff not found", Severity.Error);
+                Navigation.NavigateTo("/hrms/employees");
+            }
+            else
+            {
+                // Log view action
+                await StaffService.LogViewAsync(StaffId, _tenantId, _userId, null);
+
+                // Load certificates
+                await LoadCertificatesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading staff: {ex.Message}", Severity.Error);
+            Navigation.NavigateTo("/hrms/employees");
+        }
+    }
+
+    private async Task LoadCertificatesAsync()
+    {
+        try
+        {
+            var certificates = await CourseParticipantService.GetCertificatesByStaffIdAsync(StaffId, _tenantId);
+            _certificates = certificates.ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading certificates: {ex.Message}", Severity.Warning);
+            _certificates = new List<StaffCertificateDto>();
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/hrms/employees");
+    }
+
+    private void DownloadDocument(LegalDocumentDto document)
+    {
+        // TODO: Implement document download
+        Snackbar.Add($"Download functionality for {document.FileName} - To be implemented", Severity.Info);
+    }
+
+    private async Task ViewCertificate(StaffCertificateDto certificate)
+    {
+        if (!string.IsNullOrEmpty(certificate.CertificatePath))
+        {
+            try
+            {
+                var certificateUrl = certificate.CertificatePath.StartsWith("/")
+                    ? certificate.CertificatePath
+                    : "/" + certificate.CertificatePath.Replace("\\", "/");
+                await JS.InvokeVoidAsync("window.open", certificateUrl, "_blank");
+                Snackbar.Add($"Opening certificate (Serial: {certificate.CertificateSerialNumber})", Severity.Success);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add("Error opening certificate", Severity.Error);
+            }
+        }
+        else
+        {
+            Snackbar.Add("Certificate file not available", Severity.Warning);
+        }
+    }
+
+    private async Task DownloadCertificate(StaffCertificateDto certificate)
+    {
+        if (!string.IsNullOrEmpty(certificate.CertificatePath))
+        {
+            try
+            {
+                var certificateUrl = certificate.CertificatePath.StartsWith("/")
+                    ? certificate.CertificatePath
+                    : "/" + certificate.CertificatePath.Replace("\\", "/");
+
+                // Trigger download using JavaScript
+                await JS.InvokeVoidAsync("downloadFile", certificateUrl, $"Certificate_{certificate.CertificateSerialNumber}.pdf");
+                Snackbar.Add($"Downloading certificate: {certificate.CertificateSerialNumber}", Severity.Success);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add("Error downloading certificate", Severity.Error);
+            }
+        }
+        else
+        {
+            Snackbar.Add("Certificate file not available", Severity.Warning);
+        }
+    }
+}

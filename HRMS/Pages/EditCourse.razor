@@ -1,0 +1,362 @@
+@page "/tms/courses/edit/{CourseId:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICourseRegistrationService CourseService
+@inject IMasterDropdownService MasterDropdownService
+@inject IStaffService StaffService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Edit Course</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_model == null)
+    {
+        <MudAlert Severity="Severity.Error">Course not found.</MudAlert>
+    }
+    else
+    {
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudPaper Elevation="2" Class="pa-6" Style="border-radius: 12px;">
+                <div class="mb-4">
+                    <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e;">Edit Course</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Update course information</MudText>
+                </div>
+
+                <MudGrid Spacing="3">
+                    <!-- Code -->
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.Code"
+                                     Label="Code *"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Code is required"
+                                     FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- Course Code -->
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.CourseCode"
+                                     Label="Course Code *"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Course Code is required"
+                                     FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- Title -->
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Title"
+                                     Label="Title *"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Title is required"
+                                     FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- Training Module -->
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.TrainingModule"
+                                     Label="Training Module *"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Training Module is required"
+                                     FullWidth="@true" />
+                    </MudItem>
+
+                    <!-- Course Type -->
+                    <MudItem xs="12" md="6">
+                        <MudSelect @bind-Value="_model.CourseTypeId"
+                                  Label="Course Type *"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  FullWidth="@true"
+                                  T="int">
+                            @foreach (var courseType in _courseTypes)
+                            {
+                                <MudSelectItem Value="@courseType.Id">@courseType.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <!-- Course Category -->
+                    <MudItem xs="12" md="6">
+                        <MudSelect @bind-Value="_model.CourseCategoryId"
+                                  Label="Course Category *"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  FullWidth="@true"
+                                  T="int">
+                            @foreach (var category in _courseCategories)
+                            {
+                                <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <!-- Trainer -->
+                    <MudItem xs="12" md="6">
+                        <MudSelect @bind-Value="_model.TrainerId"
+                                  Label="Trainer *"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  FullWidth="@true"
+                                  T="int">
+                            @foreach (var trainer in _trainers)
+                            {
+                                <MudSelectItem Value="@trainer.StaffId">@trainer.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <!-- Duration -->
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_model.Duration"
+                                        Label="Duration (hours) *"
+                                        Variant="Variant.Outlined"
+                                        Required="true"
+                                        Min="0.1m"
+                                        Step="0.5m"
+                                        FullWidth="@true"
+                                        T="decimal" />
+                    </MudItem>
+
+                    <!-- Validity Period -->
+                    <MudItem xs="12" md="6">
+                        <MudSelect @bind-Value="_model.ValidityPeriod"
+                                  Label="Validity Period *"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  FullWidth="@true"
+                                  T="int">
+                            @foreach (var validity in _validityPeriods)
+                            {
+                                <MudSelectItem Value="@validity.Id">@validity.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+
+                <div class="d-flex justify-end gap-2 mt-6">
+                    <MudButton Variant="Variant.Text"
+                              OnClick="Cancel">
+                        Cancel
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              Disabled="@(!isValid || _isSubmitting)"
+                              OnClick="HandleSubmit">
+                        @if (_isSubmitting)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Updating...</span>
+                        }
+                        else
+                        {
+                            <span>Update Course</span>
+                        }
+                    </MudButton>
+                </div>
+            </MudPaper>
+        </MudForm>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public int CourseId { get; set; }
+
+    private MudForm? form;
+    private bool isValid;
+    private UpdateCourseRequest? _model;
+    private bool _isLoading = true;
+    private bool _isSubmitting = false;
+    private int _tenantId;
+    private int _userId;
+
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _courseTypes = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _courseCategories = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _validityPeriods = new();
+    private List<HRMS.Core.Domain.Entities.Staff> _trainers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+        {
+            Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+            return;
+        }
+
+        _tenantId = int.Parse(tenantIdClaim);
+        _userId = int.Parse(userIdClaim);
+
+        await LoadDropdownsAsync();
+        await LoadCourseAsync();
+    }
+
+    private async Task LoadDropdownsAsync()
+    {
+        try
+        {
+            var courseTypes = await MasterDropdownService.GetByCategoryAsync("Course Type", _tenantId);
+            _courseTypes = courseTypes.ToList();
+
+            var courseCategories = await MasterDropdownService.GetByCategoryAsync("Course Category", _tenantId);
+            _courseCategories = courseCategories.ToList();
+
+            var validityPeriods = await MasterDropdownService.GetByCategoryAsync("Validity Period", _tenantId);
+            _validityPeriods = validityPeriods.ToList();
+
+            var allStaff = await StaffService.GetPagedAsync(_tenantId, 1, 1000, null, null, null);
+            _trainers = allStaff.Items.Select(s => new HRMS.Core.Domain.Entities.Staff
+            {
+                StaffId = s.StaffId,
+                Name = s.Name
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading dropdowns: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadCourseAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            var course = await CourseService.GetByIdAsync(CourseId, _tenantId);
+
+            if (course != null)
+            {
+                _model = new UpdateCourseRequest
+                {
+                    CourseId = course.CourseId,
+                    Code = course.Code,
+                    CourseCode = course.CourseCode,
+                    Title = course.Title,
+                    TrainingModule = course.TrainingModule,
+                    CourseTypeId = course.CourseTypeId,
+                    CourseCategoryId = course.CourseCategoryId,
+                    TrainerId = course.TrainerId,
+                    Duration = course.Duration,
+                    ValidityPeriod = course.ValidityPeriod,
+                    UploadFilePath = course.UploadFilePath
+                };
+            }
+            else
+            {
+                Snackbar.Add("Course not found", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading course: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (_model == null) return;
+
+        // Manual validation
+        if (string.IsNullOrWhiteSpace(_model.Code))
+        {
+            Snackbar.Add("Code is required", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_model.CourseCode))
+        {
+            Snackbar.Add("Course Code is required", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_model.Title))
+        {
+            Snackbar.Add("Title is required", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_model.TrainingModule))
+        {
+            Snackbar.Add("Training Module is required", Severity.Warning);
+            return;
+        }
+
+        if (_model.CourseTypeId <= 0)
+        {
+            Snackbar.Add("Course Type is required", Severity.Warning);
+            return;
+        }
+
+        if (_model.CourseCategoryId <= 0)
+        {
+            Snackbar.Add("Course Category is required", Severity.Warning);
+            return;
+        }
+
+        if (_model.TrainerId <= 0)
+        {
+            Snackbar.Add("Trainer is required", Severity.Warning);
+            return;
+        }
+
+        if (_model.Duration <= 0)
+        {
+            Snackbar.Add("Duration must be greater than 0", Severity.Warning);
+            return;
+        }
+
+        if (_model.ValidityPeriod <= 0)
+        {
+            Snackbar.Add("Validity Period is required", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _isSubmitting = true;
+            await CourseService.UpdateAsync(_model, _tenantId, _userId, null);
+            Snackbar.Add("Course updated successfully", Severity.Success);
+            Navigation.NavigateTo("/tms/courses");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating course: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/tms/courses");
+    }
+}

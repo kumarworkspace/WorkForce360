@@ -1,0 +1,28 @@
+@using MudBlazor
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1">@Message</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Confirm">Delete</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public string Message { get; set; } = "Are you sure you want to delete this item?";
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+
+    private void Confirm()
+    {
+        MudDialog?.Close(DialogResult.Ok(true));
+    }
+}
+

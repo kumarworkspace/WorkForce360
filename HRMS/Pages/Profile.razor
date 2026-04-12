@@ -1,0 +1,1051 @@
+@page "/profile"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@using HRMS.Core.Domain.Enums
+@using HRMS.Core.Domain.Entities
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IStaffService StaffService
+@inject IUserService UserService
+@inject IMasterDropdownService MasterDropdownService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<Profile> Logger
+@inject IAuthorizationHelper AuthorizationHelper
+@inject IJSRuntime JSRuntime
+@inject HRMS.Core.Domain.Interfaces.IUnitOfWork UnitOfWork
+@inject IDialogService DialogService
+@inject IHttpContextAccessor HttpContextAccessor
+@inject ICourseParticipantService CourseParticipantService
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Http
+
+<PageTitle>My Profile</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">My Profile</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">View and manage your personal information</MudText>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_staff == null && _userAccount != null)
+    {
+        <!-- Account-only profile — no staff record linked yet -->
+        <MudGrid Spacing="3">
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <MudGrid Spacing="3" AlignItems="AlignItems.Center">
+                        <MudItem xs="12" md="2">
+                            <div class="d-flex justify-center">
+                                <MudAvatar Size="Size.Large" Style="width: 100px; height: 100px; border: 4px solid white; font-size: 42px;">
+                                    @(_userAccount.FullName?.Substring(0, 1).ToUpper() ?? "U")
+                                </MudAvatar>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="12" md="10">
+                            <MudText Typo="Typo.h5" Style="color: white; font-weight: 600;">@_userAccount.FullName</MudText>
+                            <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.9);">@_userAccount.Email</MudText>
+                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8); margin-top: 4px;">@_userAccount.Role</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                    <MudText Typo="Typo.h6" Style="font-weight: 600; color: #1a237e; margin-bottom: 16px;">Account Information</MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Full Name</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_userAccount.FullName</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Email</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_userAccount.Email</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Role</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_userAccount.Role</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Email Verified</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_userAccount.IsEmailVerified ? "Yes" : "No")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Account Status</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_userAccount.IsActive ? "Active" : "Inactive")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Member Since</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_userAccount.CreatedDate.ToString("MMM dd, yyyy")</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px; height: 100%;">
+                    <MudText Typo="Typo.h6" Style="font-weight: 600; color: #1a237e; margin-bottom: 16px;">Staff Profile</MudText>
+                    <MudAlert Severity="Severity.Info" Class="mb-2">
+                        No staff record is linked to this account.
+                    </MudAlert>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        To link a staff record, go to <b>Admin → User Management</b>, edit this user, and select the corresponding staff member.
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+    else if (_staff == null)
+    {
+        <MudAlert Severity="Severity.Warning">Unable to load profile. Please try again.</MudAlert>
+    }
+    else
+    {
+        <MudGrid Spacing="3">
+            <!-- Profile Header Card -->
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <MudGrid Spacing="3" AlignItems="AlignItems.Center">
+                        <MudItem xs="12" md="3">
+                            <div class="d-flex justify-center">
+                                @if (!string.IsNullOrEmpty(_staff.Photo))
+                                {
+                                    <MudAvatar Size="Size.Large" Style="width: 120px; height: 120px; border: 4px solid white;">
+                                        <MudImage Src="@("/" + _staff.Photo.Replace('\\', '/'))" />
+                                    </MudAvatar>
+                                }
+                                else
+                                {
+                                    <MudAvatar Size="Size.Large" Style="width: 120px; height: 120px; border: 4px solid white; font-size: 48px;">
+                                        @(_staff.Name?.Substring(0, 1).ToUpper() ?? "U")
+                                    </MudAvatar>
+                                }
+                            </div>
+                        </MudItem>
+                        <MudItem xs="12" md="9">
+                            <MudText Typo="Typo.h5" Style="color: white; font-weight: 600;">@_staff.Name</MudText>
+                            <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.9);">@_staff.EmployeeCode</MudText>
+                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8); margin-top: 8px;">
+                                @_staff.Position | @_staff.Department | @_staff.Division
+                            </MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Personal Information -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px; height: 100%;">
+                    <MudText Typo="Typo.h6" Style="font-weight: 600; color: #1a237e; margin-bottom: 16px;">Personal Information</MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Full Name</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_staff.Name</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Date of Birth</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.DateOfBirth?.ToString("MMM dd, yyyy") ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Gender</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.GenderName ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Email</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_staff.Email</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Phone Number</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.PhoneNumber ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Address</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.Address ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Identity Card</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.IdentityCard ?? "N/A")</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Employment Information -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px; height: 100%;">
+                    <MudText Typo="Typo.h6" Style="font-weight: 600; color: #1a237e; margin-bottom: 16px;">Employment Information</MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Company</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_staff.Company</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Division</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.Division ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Department</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.Department ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Position</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.Position ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Employment Status</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.EmploymentStatusName ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Date Joined</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.DateJoined?.ToString("MMM dd, yyyy") ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Retirement Date</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@(_staff.RetirementDate?.ToString("MMM dd, yyyy") ?? "N/A")</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Education Details -->
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                    <div class="d-flex align-center justify-space-between mb-3">
+                        <MudText Typo="Typo.h6" Style="font-weight: 600; color: #1a237e;">Education Details</MudText>
+                        @if (_canEdit)
+                        {
+                            <MudButton Variant="Variant.Outlined" 
+                                      Color="Color.Primary" 
+                                      Size="Size.Small"
+                                      StartIcon="@Icons.Material.Filled.Add"
+                                      OnClick="@(EventCallback.Factory.Create<MouseEventArgs>(this, () => OpenEducationDialog()))">
+                                Add Education
+                            </MudButton>
+                        }
+                    </div>
+                    @if (_staff.EducationDetails == null || !_staff.EducationDetails.Any())
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No education details available.</MudText>
+                    }
+                    else
+                    {
+                        <MudTable Items="_staff.EducationDetails" Hover="true" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Qualification</MudTh>
+                                <MudTh>Institution</MudTh>
+                                <MudTh>Start Date</MudTh>
+                                <MudTh>End Date</MudTh>
+                                <MudTh>Year</MudTh>
+                                <MudTh>Grade</MudTh>
+                                @if (_canEdit)
+                                {
+                                    <MudTh>Actions</MudTh>
+                                }
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Qualification">@(context.Qualification ?? "N/A")</MudTd>
+                                <MudTd DataLabel="Institution">@(context.Institution ?? "N/A")</MudTd>
+                                <MudTd DataLabel="Start Date">@(context.StartDate?.ToString("MMM dd, yyyy") ?? "N/A")</MudTd>
+                                <MudTd DataLabel="End Date">@(context.EndDate?.ToString("MMM dd, yyyy") ?? "N/A")</MudTd>
+                                <MudTd DataLabel="Year">@(context.YearOfPassing?.ToString() ?? "N/A")</MudTd>
+                                <MudTd DataLabel="Grade">@(context.GradeOrPercentage ?? "N/A")</MudTd>
+                                @if (_canEdit)
+                                {
+                                    <MudTd DataLabel="Actions">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                                      Color="Color.Primary" 
+                                                      Size="Size.Small"
+                                                      Title="Edit"
+                                                      OnClick="@(() => OpenEducationDialog(context))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                      Color="Color.Error" 
+                                                      Size="Size.Small"
+                                                      Title="Delete"
+                                                      OnClick="@(() => DeleteEducation(context))" />
+                                    </MudTd>
+                                }
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Experience Details -->
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                    <div class="d-flex align-center justify-space-between mb-3">
+                        <MudText Typo="Typo.h6" Style="font-weight: 600; color: #1a237e;">Experience Details</MudText>
+                        @if (_canEdit)
+                        {
+                            <MudButton Variant="Variant.Outlined" 
+                                      Color="Color.Primary" 
+                                      Size="Size.Small"
+                                      StartIcon="@Icons.Material.Filled.Add"
+                                      OnClick="@(EventCallback.Factory.Create<MouseEventArgs>(this, () => OpenExperienceDialog()))">
+                                Add Experience
+                            </MudButton>
+                        }
+                    </div>
+                    @if (_staff.ExperienceDetails == null || !_staff.ExperienceDetails.Any())
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No experience details available.</MudText>
+                    }
+                    else
+                    {
+                        <MudTable Items="_staff.ExperienceDetails" Hover="true" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Company</MudTh>
+                                <MudTh>Position</MudTh>
+                                <MudTh>Start Date</MudTh>
+                                <MudTh>End Date</MudTh>
+                                <MudTh>Total Experience</MudTh>
+                                @if (_canEdit)
+                                {
+                                    <MudTh>Actions</MudTh>
+                                }
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Company">@context.Company</MudTd>
+                                <MudTd DataLabel="Position">@context.Position</MudTd>
+                                <MudTd DataLabel="Start Date">@(context.StartDate?.ToString("MMM dd, yyyy") ?? "N/A")</MudTd>
+                                <MudTd DataLabel="End Date">@(context.EndDate?.ToString("MMM dd, yyyy") ?? "Present")</MudTd>
+                                <MudTd DataLabel="Total Experience">@(context.TotalExperience ?? "N/A")</MudTd>
+                                @if (_canEdit)
+                                {
+                                    <MudTd DataLabel="Actions">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                                      Color="Color.Primary" 
+                                                      Size="Size.Small"
+                                                      Title="Edit"
+                                                      OnClick="@(EventCallback.Factory.Create<MouseEventArgs>(this, () => OpenExperienceDialog(context)))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                      Color="Color.Error" 
+                                                      Size="Size.Small"
+                                                      Title="Delete"
+                                                      OnClick="@(EventCallback.Factory.Create<MouseEventArgs>(this, () => DeleteExperience(context)))" />
+                                    </MudTd>
+                                }
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Documents -->
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                    <div class="d-flex align-center justify-space-between mb-3">
+                        <MudText Typo="Typo.h6" Style="font-weight: 600; color: #1a237e;">Documents</MudText>
+                        @if (_canEdit)
+                        {
+                            <MudButton Variant="Variant.Outlined" 
+                                      Color="Color.Primary" 
+                                      Size="Size.Small"
+                                      StartIcon="@Icons.Material.Filled.Upload"
+                                      OnClick="OpenDocumentUploadDialog">
+                                Upload Document
+                            </MudButton>
+                        }
+                    </div>
+                    @if (_staff.LegalDocuments == null || !_staff.LegalDocuments.Any())
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No documents available.</MudText>
+                    }
+                    else
+                    {
+                        <MudTable Items="_staff.LegalDocuments" Hover="true" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Document Type</MudTh>
+                                <MudTh>File Name</MudTh>
+                                <MudTh>Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Document Type">@context.DocumentType</MudTd>
+                                <MudTd DataLabel="File Name">@context.FileName</MudTd>
+                                <MudTd DataLabel="Actions">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Download" 
+                                                  Color="Color.Info" 
+                                                  Size="Size.Small"
+                                                  Title="Download"
+                                                  OnClick="@(() => DownloadDocument(context))" />
+                                    @if (_canEdit)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                      Color="Color.Error" 
+                                                      Size="Size.Small"
+                                                      Title="Delete"
+                                                      OnClick="@(() => DeleteDocument(context))" />
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Training History -->
+            @if (_trainingHistory.Any())
+            {
+                <MudItem xs="12">
+                    <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+                        <MudText Typo="Typo.h6" Style="font-weight: 600; color: #1a237e; margin-bottom: 16px;">Training History</MudText>
+                        <MudTable Items="_trainingHistory" Hover="true" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Course</MudTh>
+                                <MudTh>Dates</MudTh>
+                                <MudTh>Trainer</MudTh>
+                                <MudTh>Attendance</MudTh>
+                                <MudTh>Result</MudTh>
+                                <MudTh>Certificate</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Course">
+                                    <div style="font-weight:500;">@context.CourseTitle</div>
+                                    @if (!string.IsNullOrEmpty(context.CourseCode))
+                                    {
+                                        <div style="font-size:0.75rem; color:#666;">@context.CourseCode</div>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Dates">@context.StartDate.ToString("dd MMM yyyy") – @context.EndDate.ToString("dd MMM yyyy")</MudTd>
+                                <MudTd DataLabel="Trainer">@context.TrainerName</MudTd>
+                                <MudTd DataLabel="Attendance">
+                                    @if (context.Status != "Upcoming")
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="@(context.AttendancePercentage >= 80 ? Color.Success : Color.Warning)">
+                                            @context.AttendancePercentage.ToString("F1")%
+                                        </MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">N/A</MudText>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Result">
+                                    @if (!string.IsNullOrEmpty(context.ResultStatus))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="@(context.ResultStatus == "Pass" ? Color.Success : Color.Error)">
+                                            @context.ResultStatus
+                                        </MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Certificate">
+                                    @if (!string.IsNullOrEmpty(context.CertificatePath))
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.CardMembership"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       Title="View Certificate"
+                                                       OnClick="@(() => Navigation.NavigateTo(context.CertificatePath!))" />
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private bool _isSuperAdmin = false;
+    private bool _canEdit = true;
+    private int _tenantId;
+    private int _userId;
+    private int? _staffId;
+    private StaffDto? _staff;
+    private UserListDto? _userAccount;
+    private List<MyCourseSummaryDto> _trainingHistory = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+        {
+            Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+            return;
+        }
+
+        _tenantId = int.Parse(tenantIdClaim);
+        _userId = int.Parse(userIdClaim);
+        _isSuperAdmin = roleClaim == "Super Admin";
+
+        // All users can edit their own profile (including Super Admin)
+        _canEdit = true;
+
+        // Load document types
+        await LoadDocumentTypesAsync();
+
+        // Get user's StaffId from User table
+        try
+        {
+            var userEntity = await UserService.GetByIdAsync(_userId, _tenantId);
+            _userAccount = userEntity;
+
+            if (userEntity != null && userEntity.StaffId.HasValue)
+            {
+                _staffId = userEntity.StaffId.Value;
+                await LoadProfileAsync();
+            }
+            else
+            {
+                // No staff record linked — show account-only view (handled in UI)
+                _isLoading = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading user profile");
+            Snackbar.Add("Error loading profile: " + ex.Message, Severity.Error);
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadProfileAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            if (_staffId.HasValue)
+            {
+                _staff = await StaffService.GetByIdAsync(_staffId.Value, _tenantId);
+                if (_staff == null)
+                {
+                    Snackbar.Add("Profile not found", Severity.Error);
+                }
+
+                try
+                {
+                    var courses = await CourseParticipantService.GetMyCoursesAsync(_staffId.Value, _tenantId);
+                    _trainingHistory = courses.Where(c => c.Status != "Upcoming").OrderByDescending(c => c.EndDate).ToList();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Could not load training history for staff {StaffId}", _staffId.Value);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading profile");
+            Snackbar.Add("Error loading profile: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _documentTypes = new();
+
+    private async Task LoadDocumentTypesAsync()
+    {
+        try
+        {
+            _documentTypes = (await MasterDropdownService.GetByCategoryAsync("DocumentType", _tenantId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading document types");
+        }
+    }
+
+    private async Task OpenEducationDialog()
+    {
+        await OpenEducationDialog(null);
+    }
+
+    private async Task OpenEducationDialog(EducationDetailDto? education)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Education"] = education
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<EducationDialog>(
+            education == null ? "Add Education" : "Edit Education",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is EducationDetailDto updatedEducation)
+        {
+            try
+            {
+                await SaveEducationAsync(updatedEducation, education == null);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error saving education");
+                Snackbar.Add($"Error saving education: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenExperienceDialog()
+    {
+        await OpenExperienceDialog(null);
+    }
+
+    private async Task OpenExperienceDialog(ExperienceDetailDto? experience)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Experience"] = experience
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ExperienceDialog>(
+            experience == null ? "Add Experience" : "Edit Experience",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is ExperienceDetailDto updatedExperience)
+        {
+            try
+            {
+                await SaveExperienceAsync(updatedExperience, experience == null);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error saving experience");
+                Snackbar.Add($"Error saving experience: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task SaveEducationAsync(EducationDetailDto education, bool isNew)
+    {
+        if (!_staffId.HasValue || _staff == null)
+        {
+            Snackbar.Add("Profile not found", Severity.Error);
+            return;
+        }
+
+        try
+        {
+            var updateRequest = new UpdateStaffRequest
+            {
+                StaffId = _staff.StaffId,
+                EmployeeCode = _staff.EmployeeCode,
+                Name = _staff.Name,
+                Company = _staff.Company,
+                DateOfBirth = _staff.DateOfBirth,
+                GenderId = _staff.GenderId,
+                Email = _staff.Email,
+                PhoneNumber = _staff.PhoneNumber,
+                Address = _staff.Address,
+                IdentityCard = _staff.IdentityCard,
+                Division = _staff.Division,
+                Department = _staff.Department,
+                Position = _staff.Position,
+                EmploymentStatusId = _staff.EmploymentStatusId,
+                DateJoined = _staff.DateJoined,
+                RetirementDate = _staff.RetirementDate,
+                EducationDetails = _staff.EducationDetails.ToList(),
+                ExperienceDetails = _staff.ExperienceDetails.ToList()
+            };
+
+            if (isNew)
+            {
+                updateRequest.EducationDetails.Add(education);
+            }
+            else
+            {
+                var index = updateRequest.EducationDetails.FindIndex(e => e.Id == education.Id);
+                if (index >= 0)
+                {
+                    updateRequest.EducationDetails[index] = education;
+                }
+            }
+
+            var ipAddress = GetClientIpAddress();
+            await StaffService.UpdateAsync(updateRequest, _tenantId, _userId, ipAddress);
+            
+            // Log audit
+            await LogAuditAsync(ActionType.Update, 
+                isNew ? $"Added education: {education.Qualification} from {education.Institution}" 
+                      : $"Updated education: {education.Qualification} from {education.Institution}");
+
+            Snackbar.Add(isNew ? "Education added successfully" : "Education updated successfully", Severity.Success);
+            await LoadProfileAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving education");
+            Snackbar.Add($"Error saving education: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveExperienceAsync(ExperienceDetailDto experience, bool isNew)
+    {
+        if (!_staffId.HasValue || _staff == null)
+        {
+            Snackbar.Add("Profile not found", Severity.Error);
+            return;
+        }
+
+        try
+        {
+            var updateRequest = new UpdateStaffRequest
+            {
+                StaffId = _staff.StaffId,
+                EmployeeCode = _staff.EmployeeCode,
+                Name = _staff.Name,
+                Company = _staff.Company,
+                DateOfBirth = _staff.DateOfBirth,
+                GenderId = _staff.GenderId,
+                Email = _staff.Email,
+                PhoneNumber = _staff.PhoneNumber,
+                Address = _staff.Address,
+                IdentityCard = _staff.IdentityCard,
+                Division = _staff.Division,
+                Department = _staff.Department,
+                Position = _staff.Position,
+                EmploymentStatusId = _staff.EmploymentStatusId,
+                DateJoined = _staff.DateJoined,
+                RetirementDate = _staff.RetirementDate,
+                EducationDetails = _staff.EducationDetails.ToList(),
+                ExperienceDetails = _staff.ExperienceDetails.ToList()
+            };
+
+            if (isNew)
+            {
+                updateRequest.ExperienceDetails.Add(experience);
+            }
+            else
+            {
+                var index = updateRequest.ExperienceDetails.FindIndex(e => e.Id == experience.Id);
+                if (index >= 0)
+                {
+                    updateRequest.ExperienceDetails[index] = experience;
+                }
+            }
+
+            var ipAddress = GetClientIpAddress();
+            await StaffService.UpdateAsync(updateRequest, _tenantId, _userId, ipAddress);
+            
+            // Log audit
+            await LogAuditAsync(ActionType.Update, 
+                isNew ? $"Added experience: {experience.Position} at {experience.Company}" 
+                      : $"Updated experience: {experience.Position} at {experience.Company}");
+
+            Snackbar.Add(isNew ? "Experience added successfully" : "Experience updated successfully", Severity.Success);
+            await LoadProfileAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving experience");
+            Snackbar.Add($"Error saving experience: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteEducation(EducationDetailDto education)
+    {
+        if (!_staffId.HasValue || _staff == null)
+        {
+            Snackbar.Add("Profile not found", Severity.Error);
+            return;
+        }
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var parameters = new DialogParameters
+        {
+            ["Message"] = $"Are you sure you want to delete education: {education.Qualification} from {education.Institution}?"
+        };
+
+        var dialog = await DialogService.ShowAsync<DeleteConfirmationDialog>("Delete Education", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                var updateRequest = new UpdateStaffRequest
+                {
+                    StaffId = _staff.StaffId,
+                    EmployeeCode = _staff.EmployeeCode,
+                    Name = _staff.Name,
+                    Company = _staff.Company,
+                    DateOfBirth = _staff.DateOfBirth,
+                    GenderId = _staff.GenderId,
+                    Email = _staff.Email,
+                    PhoneNumber = _staff.PhoneNumber,
+                    Address = _staff.Address,
+                    IdentityCard = _staff.IdentityCard,
+                    Division = _staff.Division,
+                    Department = _staff.Department,
+                    Position = _staff.Position,
+                    EmploymentStatusId = _staff.EmploymentStatusId,
+                    DateJoined = _staff.DateJoined,
+                    RetirementDate = _staff.RetirementDate,
+                    EducationDetails = _staff.EducationDetails.Where(e => e.Id != education.Id).ToList(),
+                    ExperienceDetails = _staff.ExperienceDetails.ToList()
+                };
+
+                var ipAddress = GetClientIpAddress();
+                await StaffService.UpdateAsync(updateRequest, _tenantId, _userId, ipAddress);
+                
+                // Log audit
+                await LogAuditAsync(ActionType.Delete, 
+                    $"Deleted education: {education.Qualification} from {education.Institution}");
+
+                Snackbar.Add("Education deleted successfully", Severity.Success);
+                await LoadProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting education");
+                Snackbar.Add($"Error deleting education: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteExperience(ExperienceDetailDto experience)
+    {
+        if (!_staffId.HasValue || _staff == null)
+        {
+            Snackbar.Add("Profile not found", Severity.Error);
+            return;
+        }
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var parameters = new DialogParameters
+        {
+            ["Message"] = $"Are you sure you want to delete experience: {experience.Position} at {experience.Company}?"
+        };
+
+        var dialog = await DialogService.ShowAsync<DeleteConfirmationDialog>("Delete Experience", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                var updateRequest = new UpdateStaffRequest
+                {
+                    StaffId = _staff.StaffId,
+                    EmployeeCode = _staff.EmployeeCode,
+                    Name = _staff.Name,
+                    Company = _staff.Company,
+                    DateOfBirth = _staff.DateOfBirth,
+                    GenderId = _staff.GenderId,
+                    Email = _staff.Email,
+                    PhoneNumber = _staff.PhoneNumber,
+                    Address = _staff.Address,
+                    IdentityCard = _staff.IdentityCard,
+                    Division = _staff.Division,
+                    Department = _staff.Department,
+                    Position = _staff.Position,
+                    EmploymentStatusId = _staff.EmploymentStatusId,
+                    DateJoined = _staff.DateJoined,
+                    RetirementDate = _staff.RetirementDate,
+                    EducationDetails = _staff.EducationDetails.ToList(),
+                    ExperienceDetails = _staff.ExperienceDetails.Where(e => e.Id != experience.Id).ToList()
+                };
+
+                var ipAddress = GetClientIpAddress();
+                await StaffService.UpdateAsync(updateRequest, _tenantId, _userId, ipAddress);
+                
+                // Log audit
+                await LogAuditAsync(ActionType.Delete, 
+                    $"Deleted experience: {experience.Position} at {experience.Company}");
+
+                Snackbar.Add("Experience deleted successfully", Severity.Success);
+                await LoadProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting experience");
+                Snackbar.Add($"Error deleting experience: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenDocumentUploadDialog()
+    {
+        if (!_staffId.HasValue || _staff == null)
+        {
+            Snackbar.Add("Profile not found", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            ["StaffId"] = _staff.StaffId,
+            ["TenantId"] = _tenantId,
+            ["UserId"] = _userId
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<DocumentUploadDialog>("Upload Document", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadProfileAsync();
+            // Log audit
+            await LogAuditAsync(ActionType.Create, "Uploaded document");
+        }
+    }
+
+    private async Task DownloadDocument(LegalDocumentDto document)
+    {
+        // TODO: Implement document download
+        Snackbar.Add("Document download - Coming soon", Severity.Info);
+    }
+
+    private async Task DeleteDocument(LegalDocumentDto document)
+    {
+        if (!_staffId.HasValue || _staff == null)
+        {
+            Snackbar.Add("Profile not found", Severity.Error);
+            return;
+        }
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var parameters = new DialogParameters
+        {
+            ["Message"] = $"Are you sure you want to delete document: {document.DocumentType} - {document.FileName}?"
+        };
+
+        var dialog = await DialogService.ShowAsync<DeleteConfirmationDialog>("Delete Document", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                var ipAddress = GetClientIpAddress();
+                await StaffService.DeleteDocumentAsync(document.Id, _tenantId, _userId);
+                
+                // Log audit
+                await LogAuditAsync(ActionType.Delete, 
+                    $"Deleted document: {document.DocumentType} - {document.FileName}");
+
+                Snackbar.Add("Document deleted successfully", Severity.Success);
+                await LoadProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting document");
+                Snackbar.Add($"Error deleting document: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private string GetClientIpAddress()
+    {
+        try
+        {
+            return HttpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+        }
+        catch
+        {
+            return "Unknown";
+        }
+    }
+
+    private async Task LogAuditAsync(ActionType actionType, string description)
+    {
+        try
+        {
+            var ipAddress = GetClientIpAddress();
+            var auditLog = new AuditLog
+            {
+                TenantId = _tenantId,
+                UserId = _userId,
+                ActionType = actionType,
+                Description = $"Profile: {description}",
+                IPAddress = ipAddress,
+                IsActive = true,
+                CreatedBy = _userId,
+                CreatedDate = DateTime.UtcNow
+            };
+
+            await UnitOfWork.AuditLogs.AddAsync(auditLog);
+            await UnitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to log audit entry");
+            // Don't throw - audit logging failure shouldn't break the operation
+        }
+    }
+}
+

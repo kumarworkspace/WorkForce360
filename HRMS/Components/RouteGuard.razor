@@ -1,0 +1,99 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using HRMS.Core.Application.Interfaces
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@if (_isAuthorized)
+{
+    @ChildContent
+}
+else if (_isChecking)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudContainer Class="pa-8">
+        <MudPaper Elevation="2" Class="pa-6" Style="text-align: center;">
+            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Large" Color="Color.Error" Style="font-size: 64px; margin-bottom: 16px;" />
+            <MudText Typo="Typo.h5" Style="margin-bottom: 8px;">Access Denied</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Style="margin-bottom: 24px;">
+                You do not have permission to access this page.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="NavigateToDashboard">
+                Go to Dashboard
+            </MudButton>
+        </MudPaper>
+    </MudContainer>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? RequiredModule { get; set; }
+    [Parameter] public int RequiredAccessLevel { get; set; } = 1; // Default: View Access
+
+    private bool _isAuthorized = false;
+    private bool _isChecking = true;
+    private int _userId = 0;
+    private int _tenantId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!user.Identity?.IsAuthenticated ?? true)
+        {
+            Navigation.NavigateTo("/signin?error=unauthorized");
+            return;
+        }
+
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out _userId))
+        {
+            Snackbar.Add("Invalid user session", Severity.Error);
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(tenantIdClaim) || !int.TryParse(tenantIdClaim, out _tenantId))
+        {
+            Snackbar.Add("Invalid tenant session", Severity.Error);
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        // Get current page path
+        var currentPath = Navigation.Uri.Replace(Navigation.BaseUri, "").Split('?')[0];
+
+        // Check access
+        if (!string.IsNullOrEmpty(RequiredModule))
+        {
+            // Check specific module access level
+            var accessLevel = await AuthorizationHelper.GetPageAccessLevelAsync(_userId, currentPath, _tenantId);
+            _isAuthorized = accessLevel >= RequiredAccessLevel;
+        }
+        else
+        {
+            // Check general page access
+            _isAuthorized = await AuthorizationHelper.HasPageAccessAsync(_userId, currentPath, _tenantId);
+        }
+
+        _isChecking = false;
+    }
+
+    private void NavigateToDashboard()
+    {
+        Navigation.NavigateTo("/dashboard");
+    }
+}
+
+
+
+
+

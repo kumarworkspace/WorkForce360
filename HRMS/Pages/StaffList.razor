@@ -1,0 +1,389 @@
+@page "/hrms/employees"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IStaffService StaffService
+@inject IMasterDropdownService MasterDropdownService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Employee Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Employee Management</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage and view all employee records</MudText>
+        </div>
+        @if (_accessLevel >= 2)
+        {
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      Size="Size.Medium"
+                      Style="box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                      OnClick="NavigateToCreate">
+                Add Employee
+            </MudButton>
+        }
+    </div>
+
+    <!-- Search and Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="4">
+                <MudTextField Value="@_searchTerm" 
+                             ValueChanged="@OnSearchChangedCallback"
+                             Label="Search by Name, Department, Division" 
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect Value="@_selectedDivision" 
+                          ValueChanged="@OnDivisionChangedCallback"
+                          Label="Select Division" 
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="string">
+                    @foreach (var division in _divisions)
+                    {
+                        <MudSelectItem Value="@division.Name">@division.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect Value="@_selectedDepartment" 
+                          ValueChanged="@OnDepartmentChangedCallback"
+                          Label="Select Department" 
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="string">
+                    @foreach (var dept in _departments)
+                    {
+                        <MudSelectItem Value="@dept.Name">@dept.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" 
+                              Color="Color.Error" 
+                              OnClick="ClearFilters"
+                              FullWidth="true">
+                        Clear
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_pagedResult == null || !_pagedResult.Items.Any())
+    {
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.body1">No employees found.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+            <MudTable Items="_pagedResult.Items" Hover="true" Dense="true" Striped="true" Style="background-color: white;">
+                <HeaderContent>
+                    <MudTh>Photo</MudTh>
+                    <MudTh>Employee Code</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Department</MudTh>
+                    <MudTh>Position</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Photo">
+                        @if (!string.IsNullOrEmpty(context.Photo))
+                        {
+                            <img src="/@context.Photo.Replace('\\', '/')" 
+                                 alt="@context.Name" 
+                                 style="width: 40px; height: 40px; object-fit: cover; border-radius: 50%;" />
+                        }
+                        else
+                        {
+                            <MudAvatar Size="Size.Small" Color="Color.Default">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" />
+                            </MudAvatar>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Employee Code">@context.EmployeeCode</MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Department">@context.Department</MudTd>
+                    <MudTd DataLabel="Position">@context.Position</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Error)">
+                            @(context.IsActive ? "Active" : "Inactive")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                      Color="Color.Info"
+                                      Size="Size.Small"
+                                      Title="View"
+                                      OnClick="@(() => NavigateToView(context.StaffId))" />
+                        @if (_accessLevel >= 2)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                          Color="Color.Primary"
+                                          Size="Size.Small"
+                                          Title="Edit"
+                                          OnClick="@(() => NavigateToEdit(context.StaffId))" />
+                        }
+                        @if (_accessLevel >= 3)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                          Color="Color.Error"
+                                          Size="Size.Small"
+                                          Title="Delete"
+                                          OnClick="@(() => DeleteStaff(context.StaffId))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <!-- Pagination -->
+            <div class="d-flex align-center justify-space-between pa-3" style="background-color: #f5f5f5; border-top: 1px solid #e0e0e0;">
+                <div class="d-flex align-center" style="gap: 8px;">
+                    <MudText Typo="Typo.body2">Rows per page:</MudText>
+                    <MudSelect T="int" Value="@_pageSize" ValueChanged="OnPageSizeChanged" Dense="true" Style="width:80px;" Variant="Variant.Outlined">
+                        <MudSelectItem T="int" Value="10">10</MudSelectItem>
+                        <MudSelectItem T="int" Value="25">25</MudSelectItem>
+                        <MudSelectItem T="int" Value="50">50</MudSelectItem>
+                        <MudSelectItem T="int" Value="100">100</MudSelectItem>
+                    </MudSelect>
+                </div>
+                <MudText Typo="Typo.body2" Color="Color.Default">
+                    Showing <strong>@((_pageNumber - 1) * _pageSize + 1)</strong> - <strong>@(Math.Min(_pageNumber * _pageSize, _pagedResult.TotalCount))</strong> of <strong>@_pagedResult.TotalCount</strong> employees
+                </MudText>
+                <MudPagination Count="@((int)Math.Ceiling((double)_pagedResult.TotalCount / _pageSize))"
+                               Selected="@_pageNumber"
+                               SelectedChanged="OnPageChanged"
+                               ShowFirstButton="true"
+                               ShowLastButton="true" />
+            </div>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private PagedResult<StaffListDto>? _pagedResult;
+    private bool _isLoading = true;
+    private int _tenantId;
+    private int _userId;
+    private int _accessLevel = 0; // 0=None, 1=View, 2=Modify, 3=Full Access
+    
+    // Pagination
+    private int _pageNumber = 1;
+    private int _pageSize = 25;
+    
+    // Filters
+    private string? _searchTerm;
+    private string? _selectedDivision;
+    private string? _selectedDepartment;
+    
+    // Dropdowns
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _divisions = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _departments = new();
+    
+    // Debounce timer for search
+    private System.Threading.Timer? _searchDebounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+        {
+            Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+            return;
+        }
+
+        _tenantId = int.Parse(tenantIdClaim);
+        _userId = int.Parse(userIdClaim);
+
+        _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Employee Management", _tenantId);
+
+        // Load sequentially to avoid DbContext concurrency issues
+        await LoadDropdownsAsync();
+        // Wait for dropdowns to complete before loading staff
+        await Task.Delay(50); // Small delay to ensure DbContext is free
+        await LoadStaffAsync();
+    }
+
+    private async Task LoadDropdownsAsync()
+    {
+        try
+        {
+            // Load dropdowns sequentially to avoid DbContext concurrency issues
+            var divisions = await MasterDropdownService.GetByCategoryAsync("Division", _tenantId);
+            _divisions = divisions.ToList();
+            
+            var departments = await MasterDropdownService.GetByCategoryAsync("Department", _tenantId);
+            _departments = departments.ToList();
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            Snackbar.Add($"Error loading dropdowns: {errorMessage}", Severity.Error);
+            // Logger not available, error already logged via Snackbar
+        }
+    }
+
+    private async Task LoadStaffAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _pagedResult = await StaffService.GetPagedAsync(_tenantId, _pageNumber, _pageSize, _searchTerm, _selectedDivision, _selectedDepartment);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading staff: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _pageNumber = page;
+        await LoadStaffAsync();
+    }
+
+    private async Task OnPageSizeChanged(int pageSize)
+    {
+        _pageSize = pageSize;
+        _pageNumber = 1;
+        await LoadStaffAsync();
+    }
+
+    private async Task OnSearchChanged(string? value)
+    {
+        _searchTerm = value;
+        _pageNumber = 1;
+        
+        // Debounce search - wait 500ms after user stops typing
+        _searchDebounceTimer?.Dispose();
+        _searchDebounceTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadStaffAsync();
+                StateHasChanged();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private EventCallback<string?> OnSearchChangedCallback => EventCallback.Factory.Create<string?>(this, OnSearchChanged);
+
+    private async Task OnDivisionChanged(string? value)
+    {
+        _selectedDivision = value;
+        _pageNumber = 1;
+        await LoadStaffAsync();
+    }
+
+    private EventCallback<string?> OnDivisionChangedCallback => EventCallback.Factory.Create<string?>(this, OnDivisionChanged);
+
+    private async Task OnDepartmentChanged(string? value)
+    {
+        _selectedDepartment = value;
+        _pageNumber = 1;
+        await LoadStaffAsync();
+    }
+
+    private EventCallback<string?> OnDepartmentChangedCallback => EventCallback.Factory.Create<string?>(this, OnDepartmentChanged);
+
+    private async Task ClearFilters()
+    {
+        _searchTerm = null;
+        _selectedDivision = null;
+        _selectedDepartment = null;
+        _pageNumber = 1;
+        await LoadStaffAsync();
+    }
+    
+    public void Dispose()
+    {
+        _searchDebounceTimer?.Dispose();
+    }
+
+    private void NavigateToCreate()
+    {
+        Navigation.NavigateTo("/hrms/employees/form");
+    }
+
+    private void NavigateToView(int staffId)
+    {
+        Navigation.NavigateTo($"/hrms/employees/view/{staffId}");
+    }
+
+    private void NavigateToEdit(int staffId)
+    {
+        Navigation.NavigateTo($"/hrms/employees/form/{staffId}");
+    }
+
+    private async Task DeleteStaff(int staffId)
+    {
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var parameters = new DialogParameters
+        {
+            ["StaffId"] = staffId,
+            ["StaffName"] = _pagedResult?.Items.FirstOrDefault(s => s.StaffId == staffId)?.Name ?? "Unknown"
+        };
+
+        var dialog = await DialogService.ShowAsync<DeleteStaffDialog>("Delete Employee", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                await StaffService.DeleteAsync(staffId, _tenantId, _userId, null);
+                Snackbar.Add("Employee deleted successfully", Severity.Success);
+                await LoadStaffAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting employee: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}
+

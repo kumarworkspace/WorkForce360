@@ -1,0 +1,274 @@
+@page "/tms/dashboard"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICourseRegistrationService CourseService
+@inject IStaffService StaffService
+@inject IUserService UserService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<TMSDashboard> Logger
+
+<PageTitle>TMS Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="mb-4">
+        <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Training Management System</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Overview of your training programs and courses</MudText>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <!-- Statistics Cards -->
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h3" Style="font-weight: bold;">@_statistics.CreatedCoursesCount</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity: 0.9;">Created Courses</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Book" Size="Size.Large" Style="opacity: 0.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border-radius: 12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h3" Style="font-weight: bold;">@_statistics.AssignedCoursesCount</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity: 0.9;">Assigned Courses</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Assignment" Size="Size.Large" Style="opacity: 0.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border-radius: 12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h3" Style="font-weight: bold;">@_statistics.ActiveCoursesCount</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity: 0.9;">Active Courses</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Style="opacity: 0.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; border-radius: 12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h3" Style="font-weight: bold;">@_statistics.TotalTrainingHours</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity: 0.9;">Total Training Hours</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Large" Style="opacity: 0.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Analytics Charts -->
+        <MudGrid Spacing="3" Class="mb-4">
+            <!-- Month-wise Course Analytics -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 12px;">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">Monthly Course Creation Trend (@DateTime.Now.Year)</MudText>
+                    @if (_monthlyStatistics != null && _monthlyStatistics.Any())
+                    {
+                        <MudChart ChartType="ChartType.Line"
+                                 ChartSeries="@_monthlyChartSeries"
+                                 XAxisLabels="@_monthlyChartLabels"
+                                 Width="100%"
+                                 Height="300px"
+                                 ChartOptions="@_monthlyChartOptions" />
+                    }
+                    else
+                    {
+                        <div style="height: 300px; display: flex; align-items: center; justify-content: center;">
+                            <MudText Color="Color.Secondary">No data available for this year</MudText>
+                        </div>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Year-wise Course Analytics -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 12px;">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">Yearly Course Creation Trend</MudText>
+                    @if (_yearlyStatistics != null && _yearlyStatistics.Any())
+                    {
+                        <MudChart ChartType="ChartType.Bar"
+                                 ChartSeries="@_yearlyChartSeries"
+                                 XAxisLabels="@_yearlyChartLabels"
+                                 Width="100%"
+                                 Height="300px"
+                                 ChartOptions="@_yearlyChartOptions" />
+                    }
+                    else
+                    {
+                        <div style="height: 300px; display: flex; align-items: center; justify-content: center;">
+                            <MudText Color="Color.Secondary">No data available</MudText>
+                        </div>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private int _tenantId;
+    private int _userId;
+    private int? _createdBy = null;
+    private int? _staffId = null;
+
+    private CourseStatisticsDto _statistics = new();
+    private List<MonthlyStatisticsDto> _monthlyStatistics = new();
+    private List<YearlyStatisticsDto> _yearlyStatistics = new();
+
+    // Chart data
+    private List<ChartSeries> _monthlyChartSeries = new();
+    private string[] _monthlyChartLabels = Array.Empty<string>();
+    private ChartOptions _monthlyChartOptions = new()
+    {
+        YAxisTicks = 1,
+        MaxNumYAxisTicks = 10,
+        LineStrokeWidth = 3
+    };
+
+    private List<ChartSeries> _yearlyChartSeries = new();
+    private string[] _yearlyChartLabels = Array.Empty<string>();
+    private ChartOptions _yearlyChartOptions = new()
+    {
+        YAxisTicks = 1,
+        MaxNumYAxisTicks = 10
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+        {
+            Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+            return;
+        }
+
+        _tenantId = int.Parse(tenantIdClaim);
+        _userId = int.Parse(userIdClaim);
+
+        // Apply role-based filtering
+        // If user is a Trainer (not Super Admin), apply role-based filtering to show:
+        // 1. Courses created by the trainer (CreatedBy = userId)
+        // 2. Courses assigned to the trainer (TrainerId = staffId)
+        var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
+        if (roleClaim != "Super Admin")
+        {
+            _createdBy = _userId;
+
+            // Get the user's StaffId for trainer assignment filtering
+            try
+            {
+                var currentUser = await UserService.GetByIdAsync(_userId, _tenantId);
+                if (currentUser != null && currentUser.StaffId.HasValue)
+                {
+                    _staffId = currentUser.StaffId.Value;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError(ex, "Error getting user StaffId for dashboard filtering");
+            }
+        }
+
+        await LoadDashboardDataAsync();
+    }
+
+    private async Task LoadDashboardDataAsync()
+    {
+        try
+        {
+            _isLoading = true;
+
+            // Get course statistics with role-based filtering
+            _statistics = await CourseService.GetCourseStatisticsAsync(_tenantId, _createdBy, _staffId);
+
+            // Get monthly statistics for current year
+            _monthlyStatistics = await CourseService.GetMonthlyStatisticsAsync(_tenantId, DateTime.Now.Year, _createdBy, _staffId);
+            PrepareMonthlyChartData();
+
+            // Get yearly statistics
+            _yearlyStatistics = await CourseService.GetYearlyStatisticsAsync(_tenantId, _createdBy, _staffId);
+            PrepareYearlyChartData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading dashboard data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void PrepareMonthlyChartData()
+    {
+        if (_monthlyStatistics == null || !_monthlyStatistics.Any())
+        {
+            _monthlyChartSeries = new();
+            _monthlyChartLabels = Array.Empty<string>();
+            return;
+        }
+
+        _monthlyChartLabels = _monthlyStatistics.Select(m => m.MonthName).ToArray();
+        _monthlyChartSeries = new List<ChartSeries>
+        {
+            new ChartSeries
+            {
+                Name = "Courses Created",
+                Data = _monthlyStatistics.Select(m => (double)m.Count).ToArray()
+            }
+        };
+    }
+
+    private void PrepareYearlyChartData()
+    {
+        if (_yearlyStatistics == null || !_yearlyStatistics.Any())
+        {
+            _yearlyChartSeries = new();
+            _yearlyChartLabels = Array.Empty<string>();
+            return;
+        }
+
+        _yearlyChartLabels = _yearlyStatistics.Select(y => y.Year.ToString()).ToArray();
+        _yearlyChartSeries = new List<ChartSeries>
+        {
+            new ChartSeries
+            {
+                Name = "Courses Created",
+                Data = _yearlyStatistics.Select(y => (double)y.Count).ToArray()
+            }
+        };
+    }
+}

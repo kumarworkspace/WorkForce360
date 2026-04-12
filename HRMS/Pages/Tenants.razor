@@ -1,0 +1,178 @@
+@page "/tenants"
+@layout MainLayout
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Domain.Entities
+@inject ITenantService TenantService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Tenant Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <MudText Typo="Typo.h4">Tenant Management</MudText>
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            Create Tenant
+        </MudButton>
+    </div>
+
+    @if (_tenants == null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!_tenants.Any())
+    {
+        <MudText Typo="Typo.body1">No tenants found.</MudText>
+    }
+    else
+    {
+        <MudTable Items="_tenants" Hover="true" Dense="true">
+            <HeaderContent>
+                <MudTh>Tenant ID</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Domain</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Tenant ID">@context.TenantId</MudTd>
+                <MudTd DataLabel="Name">@context.CompanyName</MudTd>
+                <MudTd DataLabel="Domain">@context.Domain</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Color="@(context.IsActive && !context.IsLocked ? Color.Success : Color.Error)" 
+                             Size="Size.Small">
+                        @(context.IsActive && !context.IsLocked ? "Active" : context.IsLocked ? "Locked" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                   Color="Color.Primary" 
+                                   Size="Size.Small"
+                                   OnClick="@(() => OpenEditDialog(context))" />
+                    @if (context.IsLocked)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.LockOpen" 
+                                       Color="Color.Success" 
+                                       Size="Size.Small"
+                                       OnClick="@(() => UnlockTenant(context.TenantId))" />
+                    }
+                    else
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Lock" 
+                                       Color="Color.Warning" 
+                                       Size="Size.Small"
+                                       OnClick="@(() => LockTenant(context.TenantId))" />
+                    }
+                    @if (context.IsActive)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Block" 
+                                       Color="Color.Error" 
+                                       Size="Size.Small"
+                                       OnClick="@(() => DeactivateTenant(context.TenantId))" />
+                    }
+                    else
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" 
+                                       Color="Color.Success" 
+                                       Size="Size.Small"
+                                       OnClick="@(() => ActivateTenant(context.TenantId))" />
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private List<Tenant>? _tenants;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTenantsAsync();
+    }
+
+    private async Task LoadTenantsAsync()
+    {
+        try
+        {
+            var tenants = await TenantService.GetAllTenantsAsync();
+            _tenants = tenants.ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading tenants: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        // TODO: Implement create dialog
+        Snackbar.Add("Create tenant dialog - To be implemented", Severity.Info);
+    }
+
+    private void OpenEditDialog(Tenant tenant)
+    {
+        // TODO: Implement edit dialog
+        Snackbar.Add($"Edit tenant {tenant.CompanyName} - To be implemented", Severity.Info);
+    }
+
+    private async Task LockTenant(int tenantId)
+    {
+        try
+        {
+            await TenantService.LockTenantAsync(tenantId);
+            Snackbar.Add("Tenant locked successfully", Severity.Success);
+            await LoadTenantsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error locking tenant: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task UnlockTenant(int tenantId)
+    {
+        try
+        {
+            await TenantService.UnlockTenantAsync(tenantId);
+            Snackbar.Add("Tenant unlocked successfully", Severity.Success);
+            await LoadTenantsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error unlocking tenant: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ActivateTenant(int tenantId)
+    {
+        try
+        {
+            await TenantService.ActivateTenantAsync(tenantId);
+            Snackbar.Add("Tenant activated successfully", Severity.Success);
+            await LoadTenantsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error activating tenant: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeactivateTenant(int tenantId)
+    {
+        try
+        {
+            await TenantService.DeactivateTenantAsync(tenantId);
+            Snackbar.Add("Tenant deactivated successfully", Severity.Success);
+            await LoadTenantsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deactivating tenant: {ex.Message}", Severity.Error);
+        }
+    }
+}
+

@@ -1,0 +1,262 @@
+@using HRMS.Core.Application.DTOs
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Authorization
+
+<div class="course-details-slider @(_isOpen ? "open" : "")" @onclick="@HandleOutsideClick" @onclick:stopPropagation="true">
+    <div class="slider-content" @onclick:stopPropagation="true">
+        <!-- Header -->
+        <div class="slider-header">
+            <div class="d-flex align-center justify-space-between">
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                    Course Details
+                </MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="OnClose" Size="Size.Small" />
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="slider-body">
+            @if (SelectedCourse != null)
+            {
+                <!-- Course Header -->
+                <div class="mb-4">
+                    <MudText Typo="Typo.h5" Style="font-weight: 600; color: #1a237e;">@SelectedCourse.Title</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@SelectedCourse.Code</MudText>
+                </div>
+
+                <!-- Course Information -->
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Course Code</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@SelectedCourse.CourseCode</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Training Module</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@SelectedCourse.TrainingModule</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Course Type</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@(SelectedCourse.CourseTypeName ?? "N/A")</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Course Category</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@(SelectedCourse.CourseCategoryName ?? "N/A")</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Trainer</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@(SelectedCourse.TrainerName ?? "N/A")</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Duration</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@SelectedCourse.Duration hours</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Validity Period</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@(SelectedCourse.ValidityPeriodName ?? "N/A")</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Status</MudText>
+                        <div class="mt-1">
+                            <MudChip T="string" Size="Size.Small" Color="@(SelectedCourse.IsActive ? Color.Success : Color.Error)">
+                                @(SelectedCourse.IsActive ? "Active" : "Inactive")
+                            </MudChip>
+                        </div>
+                    </MudItem>
+
+                    @if (!string.IsNullOrEmpty(SelectedCourse.UploadFilePath))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Attachment</MudText>
+                            <div class="d-flex align-center mt-1" style="gap: 8px;">
+                                <MudChip T="string" Icon="@Icons.Material.Filled.AttachFile"
+                                         Size="Size.Small"
+                                         Color="Color.Info">
+                                    @Path.GetFileName(SelectedCourse.UploadFilePath)
+                                </MudChip>
+                                <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                              Size="Size.Small"
+                                              Color="Color.Primary"
+                                              OnClick="@(() => DownloadAttachment())"
+                                              Title="Download" />
+                            </div>
+                        </MudItem>
+                    }
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Created Date</MudText>
+                        <MudText Typo="Typo.body2">@SelectedCourse.CreatedDate.ToString("dd MMM yyyy, hh:mm tt")</MudText>
+                    </MudItem>
+
+                    @if (SelectedCourse.UpdatedDate.HasValue)
+                    {
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Last Updated</MudText>
+                            <MudText Typo="Typo.body2">@SelectedCourse.UpdatedDate.Value.ToString("dd MMM yyyy, hh:mm tt")</MudText>
+                        </MudItem>
+                    }
+                </MudGrid>
+
+                <!-- Timeline -->
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-3">Timeline</MudText>
+                <div class="timeline">
+                    @if (SelectedCourse.UpdatedDate.HasValue)
+                    {
+                        <div class="timeline-item">
+                            <div class="timeline-date">@SelectedCourse.UpdatedDate.Value.ToString("dd MMM yyyy, hh:mm tt")</div>
+                            <div class="timeline-status">UPDATED</div>
+                            <div class="timeline-details">
+                                Course information was updated
+                            </div>
+                        </div>
+                    }
+                    <div class="timeline-item">
+                        <div class="timeline-date">@SelectedCourse.CreatedDate.ToString("dd MMM yyyy, hh:mm tt")</div>
+                        <div class="timeline-status">CREATED</div>
+                        <div class="timeline-details">
+                            Course was created
+                        </div>
+                        <div class="timeline-info mt-2">
+                            <MudText Typo="Typo.body2">Course Details:</MudText>
+                            <ul style="margin: 8px 0; padding-left: 20px;">
+                                <li><MudText Typo="Typo.body2">Title: @SelectedCourse.Title</MudText></li>
+                                <li><MudText Typo="Typo.body2">Duration: @SelectedCourse.Duration hours</MudText></li>
+                                <li><MudText Typo="Typo.body2">Trainer: @(SelectedCourse.TrainerName ?? "N/A")</MudText></li>
+                                <li><MudText Typo="Typo.body2">Status: @(SelectedCourse.IsActive ? "Active" : "Inactive")</MudText></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .course-details-slider {
+        position: fixed;
+        top: 0;
+        right: -500px;
+        width: 500px;
+        height: 100vh;
+        background: white;
+        box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+        z-index: 1300;
+        transition: right 0.3s ease-in-out;
+        overflow-y: auto;
+    }
+
+    .course-details-slider.open {
+        right: 0;
+    }
+
+    .slider-content {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .slider-header {
+        padding: 16px;
+        border-bottom: 1px solid #e0e0e0;
+        background: white;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .slider-body {
+        padding: 16px;
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .timeline {
+        position: relative;
+        padding-left: 24px;
+        border-left: 2px solid #e0e0e0;
+    }
+
+    .timeline-item {
+        margin-bottom: 24px;
+        position: relative;
+    }
+
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -30px;
+        top: 4px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #1976d2;
+        border: 2px solid white;
+        box-shadow: 0 0 0 2px #1976d2;
+    }
+
+    .timeline-date {
+        font-size: 0.75rem;
+        color: #666;
+        margin-bottom: 4px;
+    }
+
+    .timeline-status {
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .timeline-details {
+        font-size: 0.875rem;
+        color: #666;
+    }
+
+    .timeline-info {
+        margin-top: 8px;
+        padding: 12px;
+        background: #f5f5f5;
+        border-radius: 4px;
+    }
+</style>
+
+@code {
+    [Parameter] public CourseDto Course { get; set; } = null!;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+    [Inject] private ILogger<CourseDetailsSlider> Logger { get; set; } = null!;
+
+    private bool _isOpen = true;
+
+    private CourseDto SelectedCourse => Course;
+
+    private async Task HandleOutsideClick()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task DownloadAttachment()
+    {
+        if (!string.IsNullOrEmpty(SelectedCourse.UploadFilePath))
+        {
+            try
+            {
+                var url = $"/{SelectedCourse.UploadFilePath.Replace('\\', '/')}";
+                await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError(ex, "Error downloading course attachment");
+                Snackbar.Add("Error downloading attachment. Please try again.", Severity.Error);
+            }
+        }
+    }
+}

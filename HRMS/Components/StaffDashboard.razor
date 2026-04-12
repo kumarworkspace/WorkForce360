@@ -1,0 +1,138 @@
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject NavigationManager Navigation
+
+<div>
+    <MudText Typo="Typo.h4" Class="mb-4" Style="font-weight: 600; color: #1a237e;">Staff Dashboard</MudText>
+    
+    <MudGrid Spacing="3" Class="mb-4">
+        <!-- Holidays Card -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 8px; color: white;">
+                <MudText Typo="Typo.h6" Class="mb-2" Style="color: white;">Upcoming Holidays</MudText>
+                <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.9);">@_upcomingHolidaysCount upcoming holidays</MudText>
+                <MudButton Variant="Variant.Outlined" 
+                          Color="Color.Inherit" 
+                          Class="mt-3"
+                          Style="border-color: white; color: white;"
+                          OnClick="NavigateToHolidays">
+                    View Holidays
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Recent Leave Requests -->
+    <MudPaper Class="pa-4" Elevation="2" Style="border-radius: 8px;">
+        <div class="d-flex align-center justify-space-between mb-3">
+            <MudText Typo="Typo.h6">Recent Leave / OT Requests</MudText>
+            <MudButton Variant="Variant.Outlined" 
+                      Color="Color.Primary" 
+                      StartIcon="@Icons.Material.Filled.Add"
+                      OnClick="NavigateToNewRequest">
+                New Request
+            </MudButton>
+        </div>
+        
+        @if (_recentRequests.Any())
+        {
+            <MudTable Items="_recentRequests" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Type</MudTh>
+                    <MudTh>From Date</MudTh>
+                    <MudTh>To Date</MudTh>
+                    <MudTh>Days/Hours</MudTh>
+                    <MudTh>Status</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Type">@context.RequestTypeName</MudTd>
+                    <MudTd DataLabel="From Date">@context.FromDate.ToString("MMM dd, yyyy")</MudTd>
+                    <MudTd DataLabel="To Date">@context.ToDate.ToString("MMM dd, yyyy")</MudTd>
+                    <MudTd DataLabel="Days/Hours">
+                        @if (context.TotalDays.HasValue)
+                        {
+                            <span>@context.TotalDays.Value.ToString("F2") days</span>
+                        }
+                        else if (context.TotalHours.HasValue)
+                        {
+                            <span>@context.TotalHours.Value.ToString("F2") hours</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.LeaveStatusName ?? "Unknown")">
+                            @(context.LeaveStatusName ?? "Unknown")
+                        </MudChip>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">No recent requests found.</MudAlert>
+        }
+    </MudPaper>
+</div>
+
+@code {
+    [Parameter] public int TenantId { get; set; }
+    [Parameter] public int? StaffId { get; set; }
+    [Parameter] public ILeaveOtService? LeaveOtService { get; set; }
+    [Parameter] public IHolidayMasterService? HolidayMasterService { get; set; }
+
+    private List<LeaveOtRequestDto> _recentRequests = new();
+    private int _upcomingHolidaysCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardDataAsync();
+    }
+
+    private async Task LoadDashboardDataAsync()
+    {
+        try
+        {
+            if (StaffId.HasValue && LeaveOtService != null)
+            {
+                var requests = await LeaveOtService.GetByStaffIdAsync(StaffId.Value, TenantId);
+                _recentRequests = requests.OrderByDescending(r => r.CreatedDate).Take(5).ToList();
+            }
+
+            if (HolidayMasterService != null)
+            {
+                var holidays = await HolidayMasterService.GetByTenantIdAsync(TenantId);
+                var today = DateTime.Today;
+                _upcomingHolidaysCount = holidays.Count(h => h.HolidayDate >= today && h.IsActive);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't break the dashboard - initialize with default values
+            System.Diagnostics.Debug.WriteLine($"StaffDashboard error: {ex.Message}");
+            _recentRequests = new List<LeaveOtRequestDto>();
+            _upcomingHolidaysCount = 0;
+        }
+    }
+
+    private void NavigateToHolidays()
+    {
+        Navigation.NavigateTo("/hrms/leave/holidays");
+    }
+
+    private void NavigateToNewRequest()
+    {
+        Navigation.NavigateTo("/hrms/leave/request");
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToUpper() switch
+        {
+            "PENDING" => Color.Warning,
+            "APPROVED" => Color.Success,
+            "REJECTED" => Color.Error,
+            "CANCELLED" => Color.Default,
+            _ => Color.Default
+        };
+    }
+}
+

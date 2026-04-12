@@ -1,0 +1,370 @@
+@page "/tms/attendance/mark"
+@page "/tms/attendance/mark/{CoursePlanId:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICoursePlanningService CoursePlanningService
+@inject ICourseAttendanceService CourseAttendanceService
+@inject IUserService UserService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<MarkAttendance> Logger
+@inject HRMS.Core.Domain.Interfaces.IUnitOfWork UnitOfWork
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Mark Attendance</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="pa-4">
+    <div class="mb-4 text-center">
+        <MudIcon Icon="@Icons.Material.Filled.QrCodeScanner" Size="Size.Large" Color="Color.Primary" />
+        <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-top: 8px;">
+            Mark Attendance
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Scan QR code or enter Course Plan ID to mark your attendance
+        </MudText>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center mt-2">
+                Loading...
+            </MudText>
+        </MudPaper>
+    }
+    else if (_attendanceMarked)
+    {
+        <MudPaper Class="pa-6 text-center" Elevation="2" Style="border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                    Size="Size.Large"
+                    Style="color: #4caf50; font-size: 80px;" />
+            <MudText Typo="Typo.h5" Class="mt-3" Style="color: #4caf50; font-weight: 600;">
+                Attendance Marked Successfully!
+            </MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">
+                Your attendance has been recorded for:
+            </MudText>
+            <MudText Typo="Typo.h6" Class="mt-2" Style="color: #1a237e;">
+                @_coursePlan?.CourseTitle
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
+                Date: @DateTime.Now.ToString("dd MMM yyyy") at @DateTime.Now.ToString("hh:mm tt")
+            </MudText>
+
+            <MudDivider Class="my-4" />
+
+            <div class="d-flex gap-2 justify-center">
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          OnClick="MarkAnother">
+                    Mark Another Attendance
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                          Color="Color.Primary"
+                          OnClick="ViewCoursePlan">
+                    View Course Details
+                </MudButton>
+            </div>
+        </MudPaper>
+    }
+    else if (_autoMarking)
+    {
+        <MudPaper Class="pa-6 text-center" Elevation="2" Style="border-radius: 12px;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.h6" Class="mt-4" Style="color: #1a237e;">Marking your attendance...</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">Please wait</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <!-- Manual Entry Form -->
+        <MudPaper Class="pa-4" Elevation="2" Style="border-radius: 12px;">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1a237e; font-weight: 600;">
+                Enter Course Plan ID
+            </MudText>
+
+            <MudNumericField @bind-Value="_manualCoursePlanId"
+                           Label="Course Plan ID"
+                           Variant="Variant.Outlined"
+                           Immediate="true"
+                           FullWidth="true"
+                           Disabled="@_marking"
+                           HelperText="Enter the course plan ID or scan the QR code" />
+
+            @if (_coursePlan != null && !_marking)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-3">
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Course Found:</MudText>
+                    <MudText Typo="Typo.body1" Style="font-weight: 600;">@_coursePlan.CourseTitle</MudText>
+                    <MudText Typo="Typo.caption">@_coursePlan.CourseCode</MudText>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption">
+                        Trainer: @_coursePlan.TrainerName<br />
+                        Venue: @_coursePlan.Venue<br />
+                        Date: @_coursePlan.StartDate.ToString("dd MMM yyyy") - @_coursePlan.EndDate.ToString("dd MMM yyyy")
+                    </MudText>
+                </MudAlert>
+            }
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-3" CloseIconClicked="ClearError" ShowCloseIcon="true">
+                    @_errorMessage
+                </MudAlert>
+            }
+
+            <div class="d-flex gap-2 mt-4">
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          FullWidth="true"
+                          OnClick="MarkAttendanceAsync"
+                          Disabled="@(_manualCoursePlanId == null || _manualCoursePlanId <= 0 || _marking)"
+                          StartIcon="@Icons.Material.Filled.CheckCircle">
+                    @if (_marking)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <span class="ml-2">Marking Attendance...</span>
+                    }
+                    else
+                    {
+                        <span>Mark Attendance</span>
+                    }
+                </MudButton>
+            </div>
+        </MudPaper>
+
+        <!-- QR Code Scanner Placeholder -->
+        <MudPaper Class="pa-4 mt-4 text-center" Elevation="2" Style="border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.QrCodeScanner" Size="Size.Large" Color="Color.Primary" />
+            <MudText Typo="Typo.h6" Class="mt-2" Style="color: #1a237e;">
+                QR Code Scanner
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                Camera-based QR code scanning will be available in the next update.
+                For now, please enter the Course Plan ID manually above.
+            </MudText>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public int? CoursePlanId { get; set; }
+
+    private int? _manualCoursePlanId;
+    private CoursePlanningDto? _coursePlan;
+    private bool _isLoading = false;
+    private bool _marking = false;
+    private bool _autoMarking = false;
+    private bool _attendanceMarked = false;
+    private string? _errorMessage;
+    private int _tenantId;
+    private int _userId;
+    private int _staffId;
+    private ClaimsPrincipal? _user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _user = authState.User;
+
+        if (_user?.Identity?.IsAuthenticated ?? false)
+        {
+            var userIdClaim = _user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var tenantIdClaim = _user.FindFirst("TenantId")?.Value;
+
+            if (int.TryParse(userIdClaim, out var userId))
+                _userId = userId;
+
+            if (int.TryParse(tenantIdClaim, out var tenantId))
+                _tenantId = tenantId;
+
+            // Get staff ID for the current user
+            await LoadStaffInfo();
+        }
+
+        // If CoursePlanId is provided in route (QR scan), auto-load and auto-mark
+        if (CoursePlanId.HasValue && CoursePlanId.Value > 0)
+        {
+            _manualCoursePlanId = CoursePlanId.Value;
+            await LoadCoursePlan();
+
+            // Auto-mark if staff is loaded (QR scan flow)
+            if (_staffId > 0 && _coursePlan != null)
+            {
+                _autoMarking = true;
+                StateHasChanged();
+                await MarkAttendanceAsync();
+                _autoMarking = false;
+            }
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_manualCoursePlanId.HasValue && _manualCoursePlanId.Value > 0)
+        {
+            await LoadCoursePlan();
+        }
+    }
+
+    private async Task LoadStaffInfo()
+    {
+        try
+        {
+            var user = await UserService.GetByIdAsync(_userId, _tenantId);
+            if (user != null && user.StaffId.HasValue)
+            {
+                _staffId = user.StaffId.Value;
+            }
+            else
+            {
+                _errorMessage = "Staff information not found. Please contact your administrator.";
+                Logger.LogWarning("Staff not found for UserId: {UserId}, TenantId: {TenantId}", _userId, _tenantId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading staff information for UserId: {UserId}", _userId);
+            _errorMessage = "Error loading your staff information. Please try again.";
+        }
+    }
+
+    private async Task LoadCoursePlan()
+    {
+        if (!_manualCoursePlanId.HasValue || _manualCoursePlanId.Value <= 0)
+        {
+            _coursePlan = null;
+            return;
+        }
+
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+            _coursePlan = await CoursePlanningService.GetByIdAsync(_manualCoursePlanId.Value, _tenantId);
+
+            if (_coursePlan == null)
+            {
+                _errorMessage = $"Course plan with ID {_manualCoursePlanId} not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading course plan with ID: {Id}", _manualCoursePlanId);
+            _errorMessage = "Error loading course plan. Please check the ID and try again.";
+            _coursePlan = null;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task MarkAttendanceAsync()
+    {
+        if (!_manualCoursePlanId.HasValue || _manualCoursePlanId.Value <= 0)
+        {
+            _errorMessage = "Please enter a valid Course Plan ID.";
+            return;
+        }
+
+        if (_staffId <= 0)
+        {
+            _errorMessage = "Staff information not found. Please contact your administrator.";
+            return;
+        }
+
+        try
+        {
+            _marking = true;
+            _errorMessage = null;
+
+            var request = new MarkAttendanceRequest
+            {
+                UserId = _userId,
+                CoursePlanId = _manualCoursePlanId.Value,
+                StaffId = _staffId,
+                CheckInTime = DateTime.Now.TimeOfDay
+            };
+
+            var response = await CourseAttendanceService.MarkAttendanceAsync(request, _tenantId, _userId);
+
+            if (response.Success && response.AttendanceId > 0)
+            {
+                _attendanceMarked = true;
+                Snackbar.Add("Attendance marked successfully!", Severity.Success);
+
+                // Write audit log
+                try
+                {
+                    var ipAddress = HttpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+                    var auditLog = new HRMS.Core.Domain.Entities.AuditLog
+                    {
+                        TenantId = _tenantId,
+                        UserId = _userId,
+                        ActionType = HRMS.Core.Domain.Enums.ActionType.Create,
+                        Description = $"QR Attendance marked: StaffId={_staffId}, CourseId={_coursePlan?.CourseId}, CoursePlanId={_manualCoursePlanId}, Date={DateTime.Now:dd MMM yyyy HH:mm:ss}",
+                        IPAddress = ipAddress,
+                        IsActive = true,
+                        CreatedBy = _userId,
+                        CreatedDate = DateTime.Now
+                    };
+                    await UnitOfWork.AuditLogs.AddAsync(auditLog);
+                    await UnitOfWork.SaveChangesAsync();
+                }
+                catch (Exception auditEx)
+                {
+                    Logger.LogWarning(auditEx, "Failed to write audit log for attendance marking");
+                }
+            }
+            else
+            {
+                _errorMessage = response.Message ?? "Failed to mark attendance. Please try again.";
+                Snackbar.Add(_errorMessage, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error marking attendance for CoursePlanId: {CoursePlanId}", _manualCoursePlanId);
+            _errorMessage = "An error occurred while marking attendance. Please try again.";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _marking = false;
+        }
+    }
+
+    private void MarkAnother()
+    {
+        _attendanceMarked = false;
+        _manualCoursePlanId = null;
+        _coursePlan = null;
+        _errorMessage = null;
+    }
+
+    private void ViewCoursePlan()
+    {
+        if (_coursePlan != null)
+        {
+            Navigation.NavigateTo($"/tms/planning/view/{_coursePlan.Id}");
+        }
+    }
+
+    private void ClearError()
+    {
+        _errorMessage = null;
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+}

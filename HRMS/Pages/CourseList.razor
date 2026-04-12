@@ -1,0 +1,481 @@
+@page "/tms/courses"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@using HRMS.Components
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICourseRegistrationService CourseService
+@inject IMasterDropdownService MasterDropdownService
+@inject IStaffService StaffService
+@inject IUserService UserService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ILogger<CourseList> Logger
+
+<PageTitle>Course Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Course Management</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage and view all training courses</MudText>
+        </div>
+        @if (_accessLevel >= 2)
+        {
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      Size="Size.Medium"
+                      Style="box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                      OnClick="NavigateToCreate">
+                Add Course
+            </MudButton>
+        }
+    </div>
+
+    <!-- Search and Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3">
+                <MudTextField Value="@_searchTerm"
+                             ValueChanged="@OnSearchChangedCallback"
+                             Label="Search by Title or Code"
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect Value="@_selectedCourseTypeId"
+                          ValueChanged="@OnCourseTypeChangedCallback"
+                          Label="Course Type"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="int?">
+                    @foreach (var courseType in _courseTypes)
+                    {
+                        <MudSelectItem Value="@((int?)courseType.Id)">@courseType.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect Value="@_selectedCourseCategoryId"
+                          ValueChanged="@OnCourseCategoryChangedCallback"
+                          Label="Course Category"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="int?">
+                    @foreach (var category in _courseCategories)
+                    {
+                        <MudSelectItem Value="@((int?)category.Id)">@category.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect Value="@_selectedTrainerId"
+                          ValueChanged="@OnTrainerChangedCallback"
+                          Label="Trainer"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="int?">
+                    @foreach (var trainer in _trainers)
+                    {
+                        <MudSelectItem Value="@((int?)trainer.StaffId)">@trainer.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect Value="@_selectedIsActive"
+                          ValueChanged="@OnStatusChangedCallback"
+                          Label="Status"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="bool?">
+                    <MudSelectItem Value="@((bool?)true)">Active</MudSelectItem>
+                    <MudSelectItem Value="@((bool?)false)">Inactive</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="1">
+                <MudButton Variant="Variant.Outlined"
+                          Color="Color.Error"
+                          OnClick="ClearFilters"
+                          FullWidth="true">
+                    Clear
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_pagedResult == null || !_pagedResult.Items.Any())
+    {
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.body1">No courses found.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+            <MudTable Items="_pagedResult.Items" Hover="true" Dense="true" Striped="true" Style="background-color: white;">
+                <HeaderContent>
+                    <MudTh>Code</MudTh>
+                    <MudTh>Title</MudTh>
+                    <MudTh>Course Type</MudTh>
+                    <MudTh>Course Category</MudTh>
+                    <MudTh>Trainer</MudTh>
+                    <MudTh>Duration</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Code">@context.Code</MudTd>
+                    <MudTd DataLabel="Title">@context.Title</MudTd>
+                    <MudTd DataLabel="Course Type">@context.CourseType</MudTd>
+                    <MudTd DataLabel="Course Category">@context.CourseCategory</MudTd>
+                    <MudTd DataLabel="Trainer">@context.TrainerName</MudTd>
+                    <MudTd DataLabel="Duration">@context.Duration hrs</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Error)">
+                            @(context.IsActive ? "Active" : "Inactive")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                      Color="Color.Info"
+                                      Size="Size.Small"
+                                      Title="View"
+                                      OnClick="@(() => ViewCourseDetails(context.CourseId))" />
+                        @if (_accessLevel >= 2)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                          Color="Color.Primary"
+                                          Size="Size.Small"
+                                          Title="Edit"
+                                          OnClick="@(() => NavigateToEdit(context.CourseId))" />
+                        }
+                        @if (_accessLevel >= 3)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                          Color="Color.Error"
+                                          Size="Size.Small"
+                                          Title="Delete"
+                                          OnClick="@(() => DeleteCourse(context.CourseId, context.Title))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <!-- Pagination -->
+            <div class="d-flex align-center justify-space-between pa-3" style="background-color: #f5f5f5; border-top: 1px solid #e0e0e0;">
+                <div class="d-flex align-center" style="gap: 8px;">
+                    <MudText Typo="Typo.body2">Rows per page:</MudText>
+                    <MudSelect T="int" Value="@_pageSize" ValueChanged="OnPageSizeChanged" Dense="true" Style="width:80px;" Variant="Variant.Outlined">
+                        <MudSelectItem T="int" Value="10">10</MudSelectItem>
+                        <MudSelectItem T="int" Value="25">25</MudSelectItem>
+                        <MudSelectItem T="int" Value="50">50</MudSelectItem>
+                        <MudSelectItem T="int" Value="100">100</MudSelectItem>
+                    </MudSelect>
+                </div>
+                <MudText Typo="Typo.body2" Color="Color.Default">
+                    Showing <strong>@((_pageNumber - 1) * _pageSize + 1)</strong> - <strong>@(Math.Min(_pageNumber * _pageSize, _pagedResult.TotalCount))</strong> of <strong>@_pagedResult.TotalCount</strong> courses
+                </MudText>
+                <MudPagination Count="@((int)Math.Ceiling((double)_pagedResult.TotalCount / _pageSize))"
+                               Selected="@_pageNumber"
+                               SelectedChanged="OnPageChanged"
+                               ShowFirstButton="true"
+                               ShowLastButton="true" />
+            </div>
+        </MudPaper>
+    }
+
+    <!-- Course Details Slider -->
+    @if (_showCourseDetailsSlider && _selectedCourseForView != null)
+    {
+        <CourseDetailsSlider Course="@_selectedCourseForView"
+                           OnClose="@CloseCourseDetailsSlider" />
+    }
+</MudContainer>
+
+@code {
+    private PagedResult<CourseListDto>? _pagedResult;
+    private bool _isLoading = true;
+    private int _tenantId;
+    private int _userId;
+    private int _accessLevel = 0;
+    private int? _staffId; // For Trainer role
+    private int? _createdBy; // For Trainer role
+
+    // Pagination
+    private int _pageNumber = 1;
+    private int _pageSize = 25;
+
+    // Filters
+    private string? _searchTerm;
+    private int? _selectedCourseTypeId;
+    private int? _selectedCourseCategoryId;
+    private int? _selectedTrainerId;
+    private bool? _selectedIsActive;
+
+    // Dropdowns
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _courseTypes = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _courseCategories = new();
+    private List<HRMS.Core.Domain.Entities.Staff> _trainers = new();
+
+    // Debounce timer for search
+    private System.Threading.Timer? _searchDebounceTimer;
+
+    // Course details slider
+    private bool _showCourseDetailsSlider = false;
+    private CourseDto? _selectedCourseForView;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+        {
+            Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+            return;
+        }
+
+        _tenantId = int.Parse(tenantIdClaim);
+        _userId = int.Parse(userIdClaim);
+
+        _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Course Management", _tenantId);
+
+        // Determine role-based filtering
+        // If user is a Trainer (not Super Admin), apply role-based filtering to show:
+        // 1. Courses created by the trainer (CreatedBy = userId)
+        // 2. Courses assigned to the trainer (TrainerId = staffId)
+        if (roleClaim != "Super Admin")
+        {
+            _createdBy = _userId;
+
+            // Get the user's StaffId for trainer assignment filtering
+            try
+            {
+                var currentUser = await UserService.GetByIdAsync(_userId, _tenantId);
+                if (currentUser != null && currentUser.StaffId.HasValue)
+                {
+                    _staffId = currentUser.StaffId.Value;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError(ex, "Error getting user StaffId for filtering");
+            }
+        }
+
+        await LoadDropdownsAsync();
+        await Task.Delay(50);
+        await LoadCoursesAsync();
+    }
+
+    private async Task LoadDropdownsAsync()
+    {
+        try
+        {
+            var courseTypes = await MasterDropdownService.GetByCategoryAsync("Course Type", _tenantId);
+            _courseTypes = courseTypes.ToList();
+
+            var courseCategories = await MasterDropdownService.GetByCategoryAsync("Course Category", _tenantId);
+            _courseCategories = courseCategories.ToList();
+
+            // Load trainers from Staff
+            var allStaff = await StaffService.GetPagedAsync(_tenantId, 1, 1000, null, null, null);
+            _trainers = allStaff.Items.Select(s => new HRMS.Core.Domain.Entities.Staff
+            {
+                StaffId = s.StaffId,
+                Name = s.Name
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading dropdowns: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadCoursesAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _pagedResult = await CourseService.GetPagedAsync(
+                _tenantId, _pageNumber, _pageSize,
+                _selectedCourseTypeId, _selectedCourseCategoryId, _selectedTrainerId,
+                _selectedIsActive, _searchTerm,
+                _createdBy, _staffId); // Pass role-based filtering parameters
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading courses: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _pageNumber = page;
+        await LoadCoursesAsync();
+    }
+
+    private async Task OnPageSizeChanged(int pageSize)
+    {
+        _pageSize = pageSize;
+        _pageNumber = 1;
+        await LoadCoursesAsync();
+    }
+
+    private async Task OnSearchChanged(string? value)
+    {
+        _searchTerm = value;
+        _pageNumber = 1;
+
+        _searchDebounceTimer?.Dispose();
+        _searchDebounceTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadCoursesAsync();
+                StateHasChanged();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private EventCallback<string?> OnSearchChangedCallback => EventCallback.Factory.Create<string?>(this, OnSearchChanged);
+
+    private async Task OnCourseTypeChanged(int? value)
+    {
+        _selectedCourseTypeId = value;
+        _pageNumber = 1;
+        await LoadCoursesAsync();
+    }
+
+    private EventCallback<int?> OnCourseTypeChangedCallback => EventCallback.Factory.Create<int?>(this, OnCourseTypeChanged);
+
+    private async Task OnCourseCategoryChanged(int? value)
+    {
+        _selectedCourseCategoryId = value;
+        _pageNumber = 1;
+        await LoadCoursesAsync();
+    }
+
+    private EventCallback<int?> OnCourseCategoryChangedCallback => EventCallback.Factory.Create<int?>(this, OnCourseCategoryChanged);
+
+    private async Task OnTrainerChanged(int? value)
+    {
+        _selectedTrainerId = value;
+        _pageNumber = 1;
+        await LoadCoursesAsync();
+    }
+
+    private EventCallback<int?> OnTrainerChangedCallback => EventCallback.Factory.Create<int?>(this, OnTrainerChanged);
+
+    private async Task OnStatusChanged(bool? value)
+    {
+        _selectedIsActive = value;
+        _pageNumber = 1;
+        await LoadCoursesAsync();
+    }
+
+    private EventCallback<bool?> OnStatusChangedCallback => EventCallback.Factory.Create<bool?>(this, OnStatusChanged);
+
+    private async Task ClearFilters()
+    {
+        _searchTerm = null;
+        _selectedCourseTypeId = null;
+        _selectedCourseCategoryId = null;
+        _selectedTrainerId = null;
+        _selectedIsActive = null;
+        _pageNumber = 1;
+        await LoadCoursesAsync();
+    }
+
+    public void Dispose()
+    {
+        _searchDebounceTimer?.Dispose();
+    }
+
+    private void NavigateToCreate()
+    {
+        Navigation.NavigateTo("/tms/courses/create");
+    }
+
+    private void NavigateToEdit(int courseId)
+    {
+        Navigation.NavigateTo($"/tms/courses/edit/{courseId}");
+    }
+
+    private async Task DeleteCourse(int courseId, string courseName)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Delete Course",
+            $"Are you sure you want to delete the course '{courseName}'? This action cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (result == true)
+        {
+            try
+            {
+                await CourseService.DeleteAsync(courseId, _tenantId, _userId, null);
+                Snackbar.Add("Course deleted successfully", Severity.Success);
+                await LoadCoursesAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting course: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ViewCourseDetails(int courseId)
+    {
+        try
+        {
+            var course = await CourseService.GetByIdAsync(courseId, _tenantId);
+            if (course != null)
+            {
+                _selectedCourseForView = course;
+                _showCourseDetailsSlider = true;
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add("Course not found", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading course details: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void CloseCourseDetailsSlider()
+    {
+        _showCourseDetailsSlider = false;
+        _selectedCourseForView = null;
+        StateHasChanged();
+    }
+}

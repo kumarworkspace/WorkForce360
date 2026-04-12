@@ -1,0 +1,110 @@
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@using Microsoft.AspNetCore.Components.Forms
+@using MudBlazor
+@inject IRoleService RoleService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudTextField @bind-Value="@roleName"
+                         Label="Role Name *"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="Role name is required"
+                         FullWidth="true"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="@description"
+                         Label="Description"
+                         Variant="Variant.Outlined"
+                         Lines="3"
+                         FullWidth="true"
+                         Class="mb-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!isValid || isSaving)">
+            @if (isSaving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public RoleDto? Role { get; set; }
+    [Parameter] public int TenantId { get; set; }
+    [Parameter] public int UserId { get; set; }
+
+    private MudForm? form;
+    private bool isValid = true;
+    private bool isSaving = false;
+    private string roleName = string.Empty;
+    private string? description;
+
+    protected override void OnParametersSet()
+    {
+        if (IsEdit && Role != null)
+        {
+            roleName = Role.RoleName;
+            description = Role.Description;
+        }
+    }
+
+    private async Task Save()
+    {
+        await form!.Validate();
+        if (!isValid) return;
+
+        try
+        {
+            isSaving = true;
+
+            if (IsEdit && Role != null)
+            {
+                var updateRequest = new UpdateRoleRequest
+                {
+                    RoleId = Role.RoleId,
+                    RoleName = roleName.Trim(),
+                    Description = description?.Trim(),
+                    IsActive = Role.IsActive // Keep existing active status
+                };
+                await RoleService.UpdateAsync(updateRequest, TenantId, UserId);
+                Snackbar.Add("Role updated successfully", Severity.Success);
+            }
+            else
+            {
+                var createRequest = new CreateRoleRequest
+                {
+                    RoleName = roleName.Trim(),
+                    Description = description?.Trim()
+                };
+                await RoleService.CreateAsync(createRequest, TenantId, UserId);
+                Snackbar.Add("Role created successfully", Severity.Success);
+            }
+
+            MudDialog?.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+}
+

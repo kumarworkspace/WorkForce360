@@ -1,0 +1,802 @@
+/* #region Global */
+html, body {
+    font-family: 'Noto Sans', sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+#blazor-error-ui {
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+    }
+
+.loading-progress {
+    position: relative;
+    display: block;
+    width: 8rem;
+    height: 8rem;
+    margin: 20vh auto 1rem auto;
+}
+
+    .loading-progress circle {
+        fill: none;
+        stroke: #e0e0e0;
+        stroke-width: 0.6rem;
+        transform-origin: 50% 50%;
+        transform: rotate(-90deg);
+    }
+
+        .loading-progress circle:last-child {
+            stroke: #1b6ec2;
+            stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
+            transition: stroke-dasharray 0.05s ease-in-out;
+        }
+
+.loading-progress-text {
+    position: absolute;
+    text-align: center;
+    font-weight: bold;
+    inset: calc(20vh + 3.25rem) 0 auto 0.2rem;
+}
+
+    .loading-progress-text:after {
+        content: var(--blazor-load-percentage-text, "Loading");
+    }
+
+.btn:focus-visible {
+    outline: none;
+}
+
+.mud-appbar {
+    z-index: 800;
+}
+/* #endregion Global */
+
+/* #region Menu */
+
+/* Drawer Header */
+.menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 40px 8px 40px 12px;
+    color: white;
+}
+
+/* Header content */
+.menu-header-content {
+    display: flex;
+    align-items: center;
+}
+
+/* Base drawer */
+.mud-drawer {
+    z-index: 1300;
+    background: linear-gradient(to bottom, #05153D 0%, #0B1E4A 50%, #3B1E6D 100%);
+    border-right: 1px solid #E4E4E6;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Inner wrapper for smooth width animation */
+.menu-content-wrapper {
+    overflow: hidden;
+    width: 70px; /* collapsed width */
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); /* smooth springy feel */
+}
+
+/* Radial gradient effect inside drawer */
+.menu-drawer::after {
+    content: "";
+    position: absolute;
+    bottom: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(138,43,226,0.6) 0%, rgba(75,0,130,0) 70%);
+    opacity: 0.5;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Active nav link */
+.mud-nav-link.active {
+    background: linear-gradient(90deg, #3B82F6 0%, #8B5CF6 100%);
+    border-radius: 8px;
+    color: #fff !important;
+}
+
+/* Icon color for links */
+.mud-nav-link:not(.mud-nav-link-disabled) .mud-nav-link-icon.mud-nav-link-icon-default {
+    color: white;
+}
+
+.mud-nav-link .mud-icon-root {
+    color: #fff;
+    font-size: 24px;
+}
+
+/* Mini drawer width */
+.mud-drawer.mud-drawer-mini.mud-drawer-pos-left.mud-drawer--closed {
+    width: 70px;
+}
+
+/* Collapsed drawer styles */
+.menu-drawer.collapsed .menu-content-wrapper {
+    width: 70px;
+}
+
+.menu-drawer.collapsed .mud-nav-link .mud-nav-link-text,
+.menu-drawer.collapsed .menu-header .menu-header-content .mud-text {
+    opacity: 0;
+    max-width: 0;
+    overflow: hidden;
+    transition: opacity 0.6s ease, max-width 0.6s ease; /* smooth fade/slide */
+    color: white;
+}
+
+.menu-drawer.collapsed .mud-nav-link .mud-icon-root {
+    margin: 0 auto;
+}
+
+/* Expanded drawer styles */
+.menu-drawer.opened .menu-content-wrapper {
+    width: var(--mud-drawer-width-left); /* expanded width */
+}
+
+.menu-drawer.opened .mud-nav-link .mud-nav-link-text,
+.menu-drawer.opened .menu-header .menu-header-content .mud-text {
+    opacity: 1;
+    max-width: 250px; /* allow full text */
+    transition: opacity 0.6s ease, max-width 0.6s ease;
+    color: white;
+}
+
+.menu-drawer.opened .mud-nav-link .mud-icon-root {
+    margin: initial;
+}
+
+/* Adjust main content margin when drawer is collapsed */
+.mud-drawer-close-mini-none-left .mud-main-content {
+    margin-left: 70px;
+}
+
+/* #endregion Menu */
+
+/* #region SignIn Page */
+/* Left/Right Containers */
+.signin-left-container {
+    width: 40%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(169.03deg, #FAFBFF 40.98%, #E9EEFC 136.79%);
+}
+
+.signin-right-container {
+    width: 60%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 24px;
+    background: url('/images/hrms_tms_background.png') center/cover no-repeat;
+}
+
+/* Left Paper */
+.signin-left-paper {
+    width: 90%;
+    max-width: 450px;
+    height: 90%;
+    background: linear-gradient(169.03deg, #FAFBFF 40.98%, #E9EEFC 136.79%);
+}
+
+/* Typography */
+.signin-logo-text {
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.signin-title {
+    font-weight: 600;
+    color: #214656;
+}
+
+.signin-subtitle {
+    color: #597199;
+}
+
+/* Buttons */
+.signin-sso-button {
+    text-transform: none;
+    border-radius: 6px;
+    height: 42px;
+}
+
+.signin-primary-button {
+    text-transform: none;
+    border-radius: 6px;
+    height: 48px;
+}
+
+/* Banner Card */
+.signin-banner-card {
+    width: 515px;
+    height: 209px;
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    border-radius: 8px;
+    border: 1px solid;
+    border-image-source: linear-gradient(290.86deg, #BA9FFF 7.27%, #68FDFF 105.08%);
+    border-image-slice: 1;
+    background-color: rgba(255,255,255,0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Banner Left/Right */
+.signin-banner-top {
+    height: 157px;
+    display: flex;
+}
+
+.signin-banner-left {
+    width: 378px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.signin-banner-right {
+    width: 97px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Banner Text Gradient */
+.signin-gradient-text {
+    background: linear-gradient(290.86deg, #BA9FFF 7.27%, #68FDFF 105.08%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+}
+
+/* Banner Button */
+.signin-banner-button {
+    color: #FFFFFF;
+    border: 1.5px solid;
+    border-radius: 6px;
+    border-image-source: linear-gradient(290.86deg, #BA9FFF 7.27%, #68FDFF 105.08%);
+    border-image-slice: 1;
+    padding: 0 12px;
+    margin-top: 12px;
+    height: 32px;
+    min-width: 80px;
+}
+
+/* Bottom scrolling text */
+.signin-banner-bottom {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+}
+
+.signin-scrolling-wrapper {
+    display: flex;
+    white-space: nowrap;
+}
+
+.signin-scrolling-content {
+    display: flex;
+}
+
+.signin-scrolling-wrapper {
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+}
+
+.signin-scrolling-content {
+    display: flex;
+    white-space: nowrap;
+    animation: scroll 15s linear infinite;
+}
+
+/* Pause animation on hover */
+.signin-scrolling-wrapper:hover .signin-scrolling-content {
+    animation-play-state: paused;
+}
+
+@keyframes scroll {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+/* #endregion SignIn Page */
+
+/* #region Slide Panel */
+.slide-panel, .slide-panel-sm {
+    position: fixed;
+    top: 0;
+    right: -50%; /* start hidden */
+    height: 100vh;
+    background: white;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+    transition: right 0.7s ease-in-out; /* smooth slide */
+}
+
+.slide-panel-sm {
+    width: 35%;
+}
+
+.slide-panel {
+    width: 50%;
+}
+    /* Visible on screen */
+    .slide-panel.open, .slide-panel-sm.open {
+        right: 0; /* slide into view */
+    }
+
+
+/* Container */
+.sp-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 12px;
+}
+
+/* Header */
+.sp-header {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 10;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px 0 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #dddddd42;
+}
+
+/* Body */
+.sp-body {
+    overflow-y: auto;
+}
+
+/* Footer */
+.sp-footer {
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    z-index: 10;
+    padding: 12px;
+    border-top: 1px solid #dddddd42;
+}
+
+.sp-title {
+    font-weight: 700;
+    font-size: 20px;
+}
+
+/* Table Container */
+.sp-table {
+    border: 1px solid var(--Neutral-Palette-Border-Subtle, #E4E4E6);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: none;
+}
+
+/* Header Row */
+.sp-table-header {
+    display: flex;
+    align-items: center;
+    padding: 14px;
+    background: var(--Surface-Neutral-Subtle, #EFF1F6);
+    border-bottom: 1px solid var(--Neutral-Palette-Border-Subtle, #E4E4E6);
+}
+
+.sp-table-header-2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px;
+    background: var(--Surface-Neutral-Subtle, #EFF1F6);
+    border-bottom: 1px solid var(--Neutral-Palette-Border-Subtle, #E4E4E6);
+}
+
+.clear-btn {
+    color: #A5B3CA; /* Grey text */
+    text-decoration: underline; /* Underline text */
+    font-weight: 500;
+    font-size: 14px;
+}
+
+
+.sp-table-header-text {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+/* Parent Row */
+
+.sp-row-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: #21272D;
+}
+
+.sp-row-subtext {
+    font-weight: 400;
+    font-size: 14px;
+    color: var(--Text-Neutral-Sub-Text-Dark, #597197);
+}
+
+/* Info Alert */
+.sp-alert {
+    border-radius: 8px;
+    margin-top: 24px;
+}
+
+.sp-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px;
+    border-bottom: 1px solid var(--Neutral-Palette-Border-Subtle, #E4E4E6);
+    text-align: left;
+    font-weight: 400;
+    font-size: 14px;
+    color: var(--Text-Neutral-Sub-Text-Dark, #597197);
+    background: transparent;
+    box-shadow: none;
+}
+
+    .sp-row:hover, .sp-row-drag:hover,
+    .sp-row:focus, .sp-row-drag:focus {
+        background: transparent; /* Remove hover effect */
+    }
+
+.sp-row-drag {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0;
+    border-bottom: 1px solid var(--Neutral-Palette-Border-Subtle, #E4E4E6);
+    text-align: left;
+    font-weight: 400;
+    font-size: 14px;
+    color: var(--Text-Neutral-Sub-Text-Dark, #597197);
+    background: transparent;
+    box-shadow: none;
+}
+
+.sp-row-filter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 14px;
+    text-align: left;
+    font-weight: 400;
+    font-size: 14px;
+    color: var(--Text-Neutral-Sub-Text-Dark, #597197);
+    background: transparent;
+    box-shadow: none;
+    flex-direction: column;
+}
+
+.no-hover {
+    box-shadow: none !important;
+    background: none !important;
+}
+
+/* Scoped styles for Approver Select */
+.sp-approver-select div.mud-input-slot.mud-input-root-outlined {
+    height: fit-content;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.sp-close.mud-icon-button {
+    padding: 8px !important;
+}
+/* #endregion Slide Panel */
+/* #region Buttons */
+.mud-button-outlined-primary {
+    position: relative;
+    border: 2px solid transparent; /* fallback */
+    border-radius: 6px;
+    background-clip: padding-box; /* ensures radius works */
+    background: linear-gradient(114.46deg, #2962F5 -2.45%, #B650F1 103.46%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+
+    .mud-button-outlined-primary:hover {
+        opacity: 0.9; /* optional hover effect */
+    }
+
+    .mud-button-outlined-primary:active {
+        animation: click-outline 300ms ease-out;
+    }
+
+@keyframes click-outline {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(0.97);
+    }
+    /* slight shrink on click */
+    100% {
+        transform: scale(1);
+    }
+}
+
+.mud-button-filled-primary {
+    background: linear-gradient(106.99deg, #4779F7 -1.89%, #7742FF 100%);
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s ease-out;
+}
+
+    .mud-button-filled-primary:hover {
+        opacity: 0.9; /* optional hover effect */
+    }
+
+    .mud-button-filled-primary:active {
+        animation: click-filled 300ms ease-out;
+    }
+
+@keyframes click-filled {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(0.97);
+    }
+    /* subtle click effect */
+    100% {
+        transform: scale(1);
+    }
+}
+/* #endregion Buttons */
+
+/* #region Policy Page*/
+.policies-panel .mud-tabs-tabbar {
+    border-bottom: solid 1px #cacaca;
+    background-color: #F8F9FE;
+}
+/* #endregion Policy Page */
+
+/* #region Policy Datagrid*/
+.datagrid-container .mud-table-head .mud-table-cell {
+    background: linear-gradient(180deg, #84A8FA 16.67%, #BA9FFF 128.13%);
+    padding: 8px 13px;
+    border-right: 1px white solid;
+    line-height: 0;
+    color: #fffffff2;
+}
+
+.datagrid-container .mud-table-body .mud-table-cell {
+    line-height: 0;
+    padding: 6px 13px;
+    border-bottom: #DEEEFF solid 1px;
+}
+
+.datagrid-container {
+    border-radius: 10px;
+    overflow: hidden; /* IMPORTANT � makes inner table follow the curve */
+}
+
+.datagrid-search.mud-input-control > .mud-input-control-input-container {
+    height: 31px;
+}
+
+.datagrid-search .mud-input.mud-input-outlined.mud-input-adorned-start {
+    width: 300px;
+    height: 100%;
+    font-size: 13px;
+}
+
+.datagrid-search-x {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.datagrid-tooltip {
+    background-color: #333; /* Dark background */
+    color: #fff; /* White text */
+    padding: 8px 12px; /* Comfortable padding */
+    border-radius: 6px; /* Rounded corners */
+    font-size: 10px;
+    width: fit-content;
+    position: absolute; /* Float above content */
+    top: -40px; /* Adjust to appear above the cell */
+    left: 50%; /* Center horizontally relative to trigger */
+    transform: translateX(-50%); /* Perfect centering */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 999; /* Ensure it stays above other elements */
+    display: inline-block;
+}
+
+    /* Downward pointer */
+    .datagrid-tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%; /* Below tooltip */
+        left: 50%;
+        transform: translateX(-50%);
+        border-width: 6px;
+        border-style: solid;
+        border-color: #333 transparent transparent transparent; /* Downward arrow */
+    }
+
+/* Prevent rotation animation */
+.datagrid-container .mud-table-head .mud-table-row .sort-direction-icon {
+    transform: rotate(0deg) !important;
+    opacity: 1 !important;
+}
+
+    /* Default (unsorted) icon using mask */
+    .datagrid-container .mud-table-head .mud-table-row .sort-direction-icon .mud-svg-icon {
+        fill: transparent;
+        display: block;
+        background-color: white;
+        mask-image: url("/images/SVG/i-sort-none.svg");
+        mask-repeat: no-repeat;
+        mask-size: contain;
+        -webkit-mask-image: url("/images/SVG/i-sort-none.svg");
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+    }
+
+/* Stop rotation on sorted headers */
+.datagrid-container .mud-table-head .mud-table-row .mud-direction-asc,
+.datagrid-container .mud-table-head .mud-table-row .mud-direction-desc {
+    transform: rotate(0deg) !important;
+}
+
+    /* Generic styling for sorted states */
+    .datagrid-container .mud-table-head .mud-table-row .mud-direction-asc .mud-svg-icon,
+    .datagrid-container .mud-table-head .mud-table-row .mud-direction-desc .mud-svg-icon {
+        fill: transparent;
+        display: block;
+        background-color: white;
+        mask-image: url("/images/SVG/i-sort-none.svg");
+        mask-repeat: no-repeat;
+        mask-size: contain;
+        -webkit-mask-image: url("/images/SVG/i-sort-none.svg");
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+    }
+
+    /* Ascending */
+    .datagrid-container .mud-table-head .mud-table-row .mud-direction-asc .mud-svg-icon {
+        mask-image: url("/images/SVG/i-sort-asc.svg");
+        -webkit-mask-image: url("/images/SVG/i-sort-asc.svg");
+    }
+
+    /* Descending */
+    .datagrid-container .mud-table-head .mud-table-row .mud-direction-desc .mud-svg-icon {
+        mask-image: url("/images/SVG/i-sort-desc.svg");
+        -webkit-mask-image: url("/images/SVG/i-sort-desc.svg");
+    }
+
+/* #endregion Policy Datagrid */
+
+/* #region Policy Filter*/
+.column-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+    .column-list li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 10px;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        margin-bottom: 6px;
+        cursor: grab;
+        user-select: none;
+    }
+
+        .column-list li:active {
+            cursor: grabbing;
+        }
+
+.draggable-item {
+    box-shadow: none;
+    border-bottom: 1px solid #E4E4E6;
+    padding: 4px 12px;
+}
+
+/* #endregion Policy Filter */
+
+/* #region Dropdown*/
+/* Ensure Select2 dropdown stays above MudBlazor panels/dialogs */
+.select2-container {
+    z-index: 1500 !important;
+}
+
+.select2-dropdown {
+    z-index: 1500 !important;
+}
+
+.select2-selection__choice {
+    display: none !important;
+}
+
+.select2-selection--multiple {
+    cursor: pointer !important;
+}
+
+    .select2-selection--multiple .select2-search--inline {
+        display: none !important; /* hides inline search box */
+    }
+
+.custom-placeholder {
+    position: absolute;
+    left: 16px;
+    font-size: 14px;
+    pointer-events: none;
+    margin-left: 8px;
+    color: #999;
+}
+
+.select2-container--default .select2-selection--multiple {
+    padding-bottom: 0 !important;
+    display: flex;
+    align-items: center;
+}
+/* #endregion Dropdown*/
+
+/* #region Required Fields */
+/* Make all required field asterisks red */
+.mud-input-label .mud-input-required-sign,
+label .mud-input-required-sign,
+.required-sign {
+    color: #f44336 !important; /* Material Design Red */
+}
+/* #endregion Required Fields */
+

@@ -1,0 +1,455 @@
+@page "/admin/access-control"
+@page "/admin/access-control/{RoleId:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAccessControlService AccessControlService
+@inject IRoleService RoleService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<AccessControl> Logger
+
+<PageTitle>Access Control</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Access Control</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Assign menu permissions to roles</MudText>
+        </div>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="NavigateBack">
+            Back to Roles
+        </MudButton>
+    </div>
+
+    <!-- Role Selection -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2"
+              Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="5">
+                <MudSelect Value="@_selectedRoleId"
+                           ValueChanged="@OnRoleChanged"
+                           Label="Select Role"
+                           Variant="Variant.Outlined"
+                           T="int?">
+                    @foreach (var role in _roles)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)role.RoleId)">@role.RoleName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            @if (_selectedRoleId.HasValue && _selectedRole != null)
+            {
+                <MudItem xs="12" md="7" Class="d-flex align-center gap-3">
+                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Shield">
+                        @_selectedRole.RoleName
+                    </MudChip>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Set permission levels for each module below
+                    </MudText>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Legend -->
+    <MudPaper Class="pa-3 mb-4" Elevation="1" Style="border-radius: 8px; border-left: 4px solid #1a237e;">
+        <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.caption" Style="font-weight: 600;">Permission Levels:</MudText>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Default" />
+                <MudText Typo="Typo.caption"><strong>No Access</strong> — hidden from menu</MudText>
+            </MudStack>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Info" />
+                <MudText Typo="Typo.caption"><strong>View</strong> — read-only access</MudText>
+            </MudStack>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                <MudText Typo="Typo.caption"><strong>Modify</strong> — view + create + edit (no delete)</MudText>
+            </MudStack>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Small" Color="Color.Success" />
+                <MudText Typo="Typo.caption"><strong>Full Access</strong> — create, edit, delete</MudText>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!_selectedRoleId.HasValue)
+    {
+        <MudPaper Class="pa-4" Elevation="2" Style="border-radius: 8px;">
+            <div class="d-flex flex-column align-center pa-8">
+                <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Large" Color="Color.Default"
+                         Style="opacity: 0.3; margin-bottom: 16px;" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary">Select a role to manage permissions</MudText>
+            </div>
+        </MudPaper>
+    }
+    else
+    {
+        @foreach (var navSection in _menuSections)
+        {
+            var sectionModules = navSection.Modules
+                .Select(m => _permissions.FirstOrDefault(p => p.ModuleName.Equals(m.ModuleName, StringComparison.OrdinalIgnoreCase)))
+                .Where(p => p != null)
+                .Select(p => p!)
+                .DistinctBy(p => p.PermissionId)
+                .ToList();
+
+            if (sectionModules.Count == 0) continue;
+
+            var sectionIcon = navSection.Icon;
+            var sectionTitle = navSection.Title;
+
+            <MudPaper Class="mb-4" Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+                <!-- Section Header -->
+                <div class="d-flex align-center pa-3 gap-2"
+                     style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%); color: white;">
+                    <MudIcon Icon="@sectionIcon" Size="Size.Small" Style="color: white;" />
+                    <MudText Typo="Typo.subtitle1" Style="color: white; font-weight: 600; margin: 0;">@sectionTitle</MudText>
+                </div>
+
+                <MudTable Items="@sectionModules" Hover="true" Dense="true" Elevation="0"
+                          Style="background-color: white;">
+                    <HeaderContent>
+                        <MudTh Style="width: 30%">Module</MudTh>
+                        <MudTh Style="width: 30%">Covers</MudTh>
+                        <MudTh Align="Align.Center" Style="width: 10%">No Access</MudTh>
+                        <MudTh Align="Align.Center" Style="width: 10%">View</MudTh>
+                        <MudTh Align="Align.Center" Style="width: 10%">Modify</MudTh>
+                        <MudTh Align="Align.Center" Style="width: 10%">Full Access</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Module">
+                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.ModuleName</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Covers">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@GetModuleCoverDescription(context.ModuleName)</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="No Access" Align="Align.Center">
+                            <MudButton Size="Size.Small"
+                                       Variant="@(GetAccessLevel(context.PermissionId) == 0 ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Default"
+                                       OnClick="@(() => SetAccessLevel(context.PermissionId, 0))">
+                                No Access
+                            </MudButton>
+                        </MudTd>
+                        <MudTd DataLabel="View" Align="Align.Center">
+                            <MudButton Size="Size.Small"
+                                       Variant="@(GetAccessLevel(context.PermissionId) == 1 ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Info"
+                                       OnClick="@(() => SetAccessLevel(context.PermissionId, 1))">
+                                View
+                            </MudButton>
+                        </MudTd>
+                        <MudTd DataLabel="Modify" Align="Align.Center">
+                            <MudButton Size="Size.Small"
+                                       Variant="@(GetAccessLevel(context.PermissionId) == 2 ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Warning"
+                                       OnClick="@(() => SetAccessLevel(context.PermissionId, 2))">
+                                Modify
+                            </MudButton>
+                        </MudTd>
+                        <MudTd DataLabel="Full Access" Align="Align.Center">
+                            <MudButton Size="Size.Small"
+                                       Variant="@(GetAccessLevel(context.PermissionId) == 3 ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Success"
+                                       OnClick="@(() => SetAccessLevel(context.PermissionId, 3))">
+                                Full Access
+                            </MudButton>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+
+        <!-- Other permissions not in any section -->
+        @if (GetOtherPermissions().Count > 0)
+        {
+            <MudPaper Class="mb-4" Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+                <div class="d-flex align-center pa-3 gap-2"
+                     style="background: linear-gradient(135deg, #424242 0%, #616161 100%); color: white;">
+                    <MudIcon Icon="@Icons.Material.Filled.MoreHoriz" Size="Size.Small" Style="color: white;" />
+                    <MudText Typo="Typo.subtitle1" Style="color: white; font-weight: 600; margin: 0;">Other</MudText>
+                </div>
+                <MudTable Items="@GetOtherPermissions()" Hover="true" Dense="true" Elevation="0"
+                          Style="background-color: white;">
+                    <HeaderContent>
+                        <MudTh Style="width: 30%">Module</MudTh>
+                        <MudTh Style="width: 30%"></MudTh>
+                        <MudTh Align="Align.Center" Style="width: 10%">No Access</MudTh>
+                        <MudTh Align="Align.Center" Style="width: 10%">View</MudTh>
+                        <MudTh Align="Align.Center" Style="width: 10%">Modify</MudTh>
+                        <MudTh Align="Align.Center" Style="width: 10%">Full Access</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Module">
+                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.ModuleName</MudText>
+                        </MudTd>
+                        <MudTd></MudTd>
+                        <MudTd DataLabel="No Access" Align="Align.Center">
+                            <MudButton Size="Size.Small"
+                                       Variant="@(GetAccessLevel(context.PermissionId) == 0 ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Default"
+                                       OnClick="@(() => SetAccessLevel(context.PermissionId, 0))">
+                                No Access
+                            </MudButton>
+                        </MudTd>
+                        <MudTd DataLabel="View" Align="Align.Center">
+                            <MudButton Size="Size.Small"
+                                       Variant="@(GetAccessLevel(context.PermissionId) == 1 ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Info"
+                                       OnClick="@(() => SetAccessLevel(context.PermissionId, 1))">
+                                View
+                            </MudButton>
+                        </MudTd>
+                        <MudTd DataLabel="Modify" Align="Align.Center">
+                            <MudButton Size="Size.Small"
+                                       Variant="@(GetAccessLevel(context.PermissionId) == 2 ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Warning"
+                                       OnClick="@(() => SetAccessLevel(context.PermissionId, 2))">
+                                Modify
+                            </MudButton>
+                        </MudTd>
+                        <MudTd DataLabel="Full Access" Align="Align.Center">
+                            <MudButton Size="Size.Small"
+                                       Variant="@(GetAccessLevel(context.PermissionId) == 3 ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Success"
+                                       OnClick="@(() => SetAccessLevel(context.PermissionId, 3))">
+                                Full Access
+                            </MudButton>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-4">
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ResetChanges">
+                Reset
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveChanges"
+                       Disabled="@_isSaving" StartIcon="@Icons.Material.Filled.Save">
+                @if (_isSaving)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Save Changes
+            </MudButton>
+        </MudStack>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int? RoleId { get; set; }
+
+    private List<RoleDto> _roles = new();
+    private int? _selectedRoleId;
+    private RoleDto? _selectedRole;
+    private List<PermissionAccessDto> _permissions = new();
+
+    private Dictionary<int, int> _selectedAccessLevels = new();
+    private Dictionary<int, int> _originalAccessLevels = new();
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private int _tenantId = 0;
+    private int _userId = 0;
+
+    // Menu sections mirroring NavMenu structure — module names must match CanonicalPermissions in SeedingService
+    private static readonly List<MenuSection> _menuSections =
+    [
+        new MenuSection("HRMS", Icons.Material.Filled.People,
+        [
+            new ModuleInfo("Employee Management", "Employee list, Staff Attendance"),
+            new ModuleInfo("Leave Management",    "My Leave — submit and manage own leave requests"),
+            new ModuleInfo("Leave Approval",      "Approve or reject leave requests from staff"),
+            new ModuleInfo("Leave Configuration", "Leave Types and Holiday calendar configuration"),
+        ]),
+        new MenuSection("Training", Icons.Material.Filled.School,
+        [
+            new ModuleInfo("My Training",       "My Courses — staff view of assigned courses"),
+            new ModuleInfo("Course Management", "TMS Dashboard, Courses, Course Planning, Attendance"),
+        ]),
+        new MenuSection("LMS", Icons.Material.Filled.LibraryBooks,
+        [
+            new ModuleInfo("LMS", "LMS Dashboard, Courses, Enrollments, Certificates"),
+        ]),
+        new MenuSection("Administration", Icons.Material.Filled.AdminPanelSettings,
+        [
+            new ModuleInfo("Role Management", "User Management and Role Management"),
+            new ModuleInfo("Access Control",  "Access Control configuration and User-Role assignment"),
+            new ModuleInfo("Audit Logs",      "System audit log viewer"),
+        ]),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true) return;
+
+        if (int.TryParse(user.FindFirst("TenantId")?.Value, out var tid)) _tenantId = tid;
+        if (int.TryParse(user.FindFirst("UserId")?.Value, out var uid)) _userId = uid;
+
+        await LoadRoles();
+
+        if (RoleId.HasValue)
+        {
+            _selectedRoleId = RoleId.Value;
+            await LoadAccessMatrix();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (RoleId.HasValue && RoleId.Value != _selectedRoleId)
+        {
+            _selectedRoleId = RoleId.Value;
+            await LoadAccessMatrix();
+        }
+    }
+
+    private async Task OnRoleChanged(int? roleId)
+    {
+        _selectedRoleId = roleId;
+        if (roleId.HasValue)
+        {
+            await LoadAccessMatrix();
+        }
+        else
+        {
+            _permissions.Clear();
+            _selectedAccessLevels.Clear();
+            _originalAccessLevels.Clear();
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadRoles()
+    {
+        try
+        {
+            _isLoading = true;
+            var roles = await RoleService.GetByTenantIdAsync(_tenantId, includeInactive: false);
+            _roles = roles.Where(r => r.IsActive).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading roles: {ex.InnerException?.Message ?? ex.Message}", Severity.Error);
+            _roles = new();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAccessMatrix()
+    {
+        if (!_selectedRoleId.HasValue) return;
+
+        try
+        {
+            _isLoading = true;
+            var matrix = await AccessControlService.GetAccessControlMatrixAsync(_selectedRoleId.Value, _tenantId);
+            _selectedRole = _roles.FirstOrDefault(r => r.RoleId == _selectedRoleId.Value);
+
+            _permissions = matrix.Permissions.ToList();
+            _selectedAccessLevels = new();
+            _originalAccessLevels = new();
+
+            foreach (var p in _permissions)
+            {
+                _selectedAccessLevels[p.PermissionId] = p.AccessLevel;
+                _originalAccessLevels[p.PermissionId] = p.AccessLevel;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading access matrix: {ex.InnerException?.Message ?? ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private int GetAccessLevel(int permissionId) =>
+        _selectedAccessLevels.TryGetValue(permissionId, out var l) ? l : 0;
+
+    private List<PermissionAccessDto> GetOtherPermissions()
+    {
+        var assignedNames = _menuSections
+            .SelectMany(s => s.Modules)
+            .Select(m => m.ModuleName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return _permissions.Where(p => !assignedNames.Contains(p.ModuleName)).ToList();
+    }
+
+    private string GetModuleCoverDescription(string moduleName)
+    {
+        var info = _menuSections
+            .SelectMany(s => s.Modules)
+            .FirstOrDefault(m => m.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+        return info?.CoverDescription ?? string.Empty;
+    }
+
+    private void SetAccessLevel(int permissionId, int accessLevel)
+    {
+        _selectedAccessLevels[permissionId] = accessLevel;
+        StateHasChanged();
+    }
+
+    private void ResetChanges()
+    {
+        _selectedAccessLevels = new(_originalAccessLevels);
+        StateHasChanged();
+    }
+
+    private async Task SaveChanges()
+    {
+        if (!_selectedRoleId.HasValue || _permissions.Count == 0) return;
+
+        try
+        {
+            _isSaving = true;
+
+            var request = new UpdateAccessControlRequest
+            {
+                RoleId = _selectedRoleId.Value,
+                Permissions = _selectedAccessLevels.Select(kvp => new PermissionAccessDto
+                {
+                    PermissionId = kvp.Key,
+                    AccessLevel  = kvp.Value
+                }).ToList()
+            };
+
+            await AccessControlService.UpdateAccessControlAsync(request, _tenantId, _userId);
+            _originalAccessLevels = new(_selectedAccessLevels);
+            Snackbar.Add("Permissions saved successfully.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void NavigateBack() => Navigation.NavigateTo("/admin/roles");
+
+    private record ModuleInfo(string ModuleName, string CoverDescription);
+    private record MenuSection(string Title, string Icon, List<ModuleInfo> Modules);
+}

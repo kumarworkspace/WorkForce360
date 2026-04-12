@@ -1,0 +1,783 @@
+@using HRMS.Core.Application.DTOs
+@using HRMS.Core.Application.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Domain.Entities
+
+<div class="leave-details-slider @(_isOpen ? "open" : "")" @onclick="@HandleOutsideClick" @onclick:stopPropagation="true">
+    <div class="slider-content" @onclick:stopPropagation="true">
+        <!-- Header -->
+        <div class="slider-header" style="@(_isEditMode ? "background: #e8f4fd; border-bottom: 2px solid #1976d2;" : "")">
+            <div class="d-flex align-center justify-space-between">
+                <div>
+                    <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                        @(_isEditMode ? "Edit Leave Request" : $"Leave Details ({SelectedLeaveRequest.FromDate.ToString("dd MMM")} - {SelectedLeaveRequest.ToDate.ToString("dd MMM")})")
+                    </MudText>
+                    @if (_isEditMode)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Primary">Making changes to your leave request</MudText>
+                    }
+                </div>
+                <div class="d-flex align-center" style="gap: 4px;">
+                    @if (!_isEditMode && IsPendingStatus)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                      Color="Color.Primary"
+                                      Size="Size.Small"
+                                      Title="Edit"
+                                      OnClick="EnableEditMode" />
+                    }
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="OnClose" Size="Size.Small" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="slider-body">
+            @if (StaffInfo != null)
+            {
+                <div class="d-flex align-center mb-4" style="gap: 12px;">
+                    @if (!string.IsNullOrEmpty(StaffInfo.Photo))
+                    {
+                        <MudAvatar Size="Size.Large" Style="width: 48px; height: 48px;">
+                            <img src="@StaffInfo.Photo" alt="@StaffInfo.Name" style="width: 100%; height: 100%; object-fit: cover;" />
+                        </MudAvatar>
+                    }
+                    else
+                    {
+                        <MudAvatar Size="Size.Large" Style="width: 48px; height: 48px;">@StaffInfo.Name?.Substring(0, 1)</MudAvatar>
+                    }
+                    <div>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@StaffInfo.Name (@StaffInfo.EmployeeCode)</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@StaffInfo.Position</MudText>
+                    </div>
+                </div>
+            }
+
+            @if (!_isEditMode)
+            {
+                <!-- View Mode -->
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Leave type</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@(SelectedLeaveRequest.LeaveTypeName ?? "N/A")</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">No. of days</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@(_calculatedDays.ToString("F0")) days</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Start Date</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@SelectedLeaveRequest.FromDate.ToString("MMM dd, yyyy, ddd")</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">End Date</MudText>
+                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@SelectedLeaveRequest.ToDate.ToString("MMM dd, yyyy, ddd")</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Status</MudText>
+                        <div class="mt-1">
+                            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(SelectedLeaveRequest.LeaveStatusName ?? "Unknown")">
+                                @(SelectedLeaveRequest.LeaveStatusName ?? "Unknown")
+                            </MudChip>
+                        </div>
+                    </MudItem>
+
+                    @if (!string.IsNullOrEmpty(SelectedLeaveRequest.ApprovedBy_L1Name))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">1st Approver</MudText>
+                            <div class="d-flex align-center mt-1" style="gap: 8px;">
+                                <MudAvatar Size="Size.Small">@SelectedLeaveRequest.ApprovedBy_L1Name?.Substring(0, 1)</MudAvatar>
+                                <MudText Typo="Typo.body2">@SelectedLeaveRequest.ApprovedBy_L1Name</MudText>
+                            </div>
+                        </MudItem>
+                    }
+
+                    @if (!string.IsNullOrEmpty(SelectedLeaveRequest.ApprovedBy_HRName))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">HR Approver</MudText>
+                            <div class="d-flex align-center mt-1" style="gap: 8px;">
+                                <MudAvatar Size="Size.Small">@SelectedLeaveRequest.ApprovedBy_HRName?.Substring(0, 1)</MudAvatar>
+                                <MudText Typo="Typo.body2">@SelectedLeaveRequest.ApprovedBy_HRName</MudText>
+                            </div>
+                        </MudItem>
+                    }
+
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Attachment</MudText>
+                        @if (!string.IsNullOrEmpty(SelectedLeaveRequest.Attachment))
+                        {
+                            <div class="d-flex align-center mt-1" style="gap: 8px;">
+                                <MudChip T="string" Icon="@Icons.Material.Filled.AttachFile"
+                                         Size="Size.Small"
+                                         Color="Color.Info">
+                                    @Path.GetFileName(SelectedLeaveRequest.Attachment)
+                                </MudChip>
+                                <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                              Size="Size.Small"
+                                              Color="Color.Primary"
+                                              OnClick="@(() => DownloadAttachment())"
+                                              Title="Download" />
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2">No attachment</MudText>
+                        }
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Justification</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1">@(SelectedLeaveRequest.Reason ?? "N/A")</MudText>
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Timeline -->
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-3">Timeline</MudText>
+                <div class="timeline">
+                    @if (SelectedLeaveRequest.ApprovedDate_L1.HasValue)
+                    {
+                        <div class="timeline-item">
+                            <div class="timeline-date">@SelectedLeaveRequest.ApprovedDate_L1.Value.ToString("dd MMM yyyy, hh:mm tt")</div>
+                            <div class="timeline-status">PENDING → APPROVED</div>
+                            <div class="timeline-details">
+                                @(SelectedLeaveRequest.ApprovedBy_L1Name ?? "Manager") approved the application
+                            </div>
+                        </div>
+                    }
+                    <div class="timeline-item">
+                        <div class="timeline-date">@SelectedLeaveRequest.CreatedDate.ToString("dd MMM yyyy, hh:mm tt")</div>
+                        <div class="timeline-status">PENDING</div>
+                        <div class="timeline-details">CREATION</div>
+                        <div class="timeline-info mt-2">
+                            <MudText Typo="Typo.body2">@(StaffInfo?.Name ?? "User") made a leave request</MudText>
+                            <ul style="margin: 8px 0; padding-left: 20px;">
+                                <li><MudText Typo="Typo.body2">No. of days: @(_calculatedDays.ToString("F0")) days</MudText></li>
+                                <li><MudText Typo="Typo.body2">Dates: @SelectedLeaveRequest.FromDate.ToString("dd MMM yyyy") - @SelectedLeaveRequest.ToDate.ToString("dd MMM yyyy")</MudText></li>
+                                <li><MudText Typo="Typo.body2">Attachment: no attachment</MudText></li>
+                                <li><MudText Typo="Typo.body2">Justification: @(SelectedLeaveRequest.Reason ?? "N/A")</MudText></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            }
+            else
+            {
+                <!-- Edit Mode -->
+                <MudForm @ref="form" @bind-IsValid="@isValid">
+                    <MudGrid>
+                        <MudItem xs="12">
+                            <MudSelect T="int?" Value="@_editRequest.LeaveTypeId"
+                                      ValueChanged="OnLeaveTypeChanged"
+                                      Label="Leave Type *"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      FullWidth="@true">
+                                @foreach (var leaveType in _leaveTypes)
+                                {
+                                    <MudSelectItem T="int?" Value="@((int?)leaveType.LeaveTypeId)">@leaveType.LeaveTypeName</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudDatePicker Date="@_fromDate"
+                                          DateChanged="OnFromDateChanged"
+                                          Label="From Date *"
+                                          Variant="Variant.Outlined"
+                                          Required="true"
+                                          MinDate="@DateTime.Today"
+                                          FullWidth="@true" />
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudDatePicker Date="@_toDate"
+                                          DateChanged="OnToDateChanged"
+                                          Label="To Date *"
+                                          Variant="Variant.Outlined"
+                                          Required="true"
+                                          MinDate="@DateTime.Today"
+                                          FullWidth="@true" />
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudNumericField T="decimal?" Value="@_editTotalDays"
+                                               ValueChanged="OnTotalDaysChanged"
+                                               Label="No. of Days"
+                                               Variant="Variant.Outlined"
+                                               Min="0.0m"
+                                               Step="0.5m"
+                                               FullWidth="@true" />
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudNumericField T="decimal?" Value="@_editTotalHours"
+                                               ValueChanged="OnTotalHoursChanged"
+                                               Label="Total Hours"
+                                               Variant="Variant.Outlined"
+                                               Min="0.0m"
+                                               Step="0.5m"
+                                               FullWidth="@true" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Class="mb-2">Attachment</MudText>
+
+                            @if (!string.IsNullOrEmpty(_editRequest.Attachment))
+                            {
+                                <div class="d-flex align-center mb-2" style="gap: 8px;">
+                                    <MudChip T="string" Icon="@Icons.Material.Filled.AttachFile"
+                                             Size="Size.Small"
+                                             Color="Color.Info"
+                                             OnClose="@(() => RemoveAttachment())">
+                                        @Path.GetFileName(_editRequest.Attachment)
+                                    </MudChip>
+                                </div>
+                            }
+
+                            <InputFile OnChange="HandleEditAttachmentSelected"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      class="d-none"
+                                      id="editAttachmentInput" />
+                            <MudButton HtmlTag="label"
+                                      Variant="Variant.Outlined"
+                                      Size="Size.Small"
+                                      StartIcon="@Icons.Material.Filled.AttachFile"
+                                      for="editAttachmentInput">
+                                @(_editSelectedAttachment != null ? "Change Attachment" : "Add Attachment")
+                            </MudButton>
+
+                            @if (_editSelectedAttachment != null)
+                            {
+                                <MudText Typo="Typo.caption" Class="mt-1">
+                                    New: @_editSelectedAttachment.Name (@(_editSelectedAttachment.Size / 1024) KB)
+                                </MudText>
+                            }
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="@_editRequest.Reason"
+                                         Label="Reason / Justification *"
+                                         Variant="Variant.Outlined"
+                                         Required="true"
+                                         Lines="3"
+                                         FullWidth="@true" />
+                        </MudItem>
+                    </MudGrid>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <MudButton Variant="Variant.Text" 
+                                  FullWidth="@true"
+                                  OnClick="CancelEdit">
+                            Cancel
+                        </MudButton>
+                        <MudButton Variant="Variant.Filled" 
+                                  Color="Color.Primary" 
+                                  FullWidth="@true"
+                                  OnClick="SaveChanges"
+                                  Disabled="@(!isValid || _isSaving)">
+                            Save Changes
+                        </MudButton>
+                    </div>
+                </MudForm>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .leave-details-slider {
+        position: fixed;
+        top: 0;
+        right: -500px;
+        width: 500px;
+        height: 100vh;
+        background: white;
+        box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+        z-index: 1300;
+        transition: right 0.3s ease-in-out;
+        overflow-y: auto;
+    }
+
+    .leave-details-slider.open {
+        right: 0;
+    }
+
+    .slider-content {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .slider-header {
+        padding: 16px;
+        border-bottom: 1px solid #e0e0e0;
+        background: white;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .slider-body {
+        padding: 16px;
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .timeline {
+        position: relative;
+        padding-left: 24px;
+        border-left: 2px solid #e0e0e0;
+    }
+
+    .timeline-item {
+        margin-bottom: 24px;
+        position: relative;
+    }
+
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -30px;
+        top: 4px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #1976d2;
+        border: 2px solid white;
+        box-shadow: 0 0 0 2px #1976d2;
+    }
+
+    .timeline-date {
+        font-size: 0.75rem;
+        color: #666;
+        margin-bottom: 4px;
+    }
+
+    .timeline-status {
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .timeline-details {
+        font-size: 0.875rem;
+        color: #666;
+    }
+
+    .timeline-info {
+        margin-top: 8px;
+        padding: 12px;
+        background: #f5f5f5;
+        border-radius: 4px;
+    }
+</style>
+
+@code {
+    [Parameter] public LeaveOtRequestDto LeaveRequest { get; set; } = null!;
+    [Parameter] public StaffDto? StaffInfo { get; set; }
+    [Parameter] public bool StartInEditMode { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<LeaveOtRequestDto> OnEdit { get; set; }
+    [Parameter] public EventCallback<int> OnCancel { get; set; }
+    [Parameter] public EventCallback<UpdateLeaveOtRequestDto> OnSave { get; set; }
+
+    [Inject] private IMasterDropdownService MasterDropdownService { get; set; } = null!;
+    [Inject] private ILeaveTypeMasterService LeaveTypeMasterService { get; set; } = null!;
+    [Inject] private ILeaveOtService LeaveOtService { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+    [Inject] private ILogger<LeaveDetailsSlider> Logger { get; set; } = null!;
+    [Inject] private IFileStorageService FileStorageService { get; set; } = null!;
+    [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
+
+    private MudForm? form;
+    private bool isValid;
+    private bool _isOpen = true;
+    private bool _isEditMode = false;
+    private bool _isSaving = false;
+    private int _tenantId;
+    private decimal _calculatedDays = 0;
+
+    private LeaveOtRequestDto SelectedLeaveRequest => LeaveRequest;
+    private UpdateLeaveOtRequestDto _editRequest = new();
+    private List<LeaveTypeMasterDto> _leaveTypes = new();
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private decimal? _editTotalDays;
+    private decimal? _editTotalHours;
+    private IBrowserFile? _editSelectedAttachment;
+
+    private int _prevRequestId = 0;
+    private bool IsPendingStatus => SelectedLeaveRequest.LeaveStatusName?.ToUpper() == "PENDING";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Get tenant ID from authentication state
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var tenantIdClaim = authState.User?.FindFirst("TenantId")?.Value;
+            if (!string.IsNullOrEmpty(tenantIdClaim))
+            {
+                _tenantId = int.Parse(tenantIdClaim);
+            }
+
+            // Don't load leave types here to avoid DbContext concurrency issues
+            // They will be loaded when entering edit mode
+
+            // Calculate days for view mode
+            await CalculateDaysForView();
+
+            // Initialize edit request
+            _editRequest = new UpdateLeaveOtRequestDto
+            {
+                RequestId = SelectedLeaveRequest.RequestId,
+                StaffId = SelectedLeaveRequest.StaffId,
+                RequestTypeId = SelectedLeaveRequest.RequestTypeId,
+                LeaveTypeId = SelectedLeaveRequest.LeaveTypeId,
+                FromDate = SelectedLeaveRequest.FromDate,
+                ToDate = SelectedLeaveRequest.ToDate,
+                Reason = SelectedLeaveRequest.Reason,
+                ReportingManagerId = SelectedLeaveRequest.ReportingManagerId,
+                HRApprovalRequired = SelectedLeaveRequest.HRApprovalRequired,
+                TotalDays = SelectedLeaveRequest.TotalDays,
+                TotalHours = SelectedLeaveRequest.TotalHours
+            };
+
+            _fromDate = SelectedLeaveRequest.FromDate;
+            _toDate = SelectedLeaveRequest.ToDate;
+            _editTotalDays = SelectedLeaveRequest.TotalDays;
+            _editTotalHours = SelectedLeaveRequest.TotalHours;
+            _prevRequestId = SelectedLeaveRequest.RequestId;
+
+            if (StartInEditMode)
+            {
+                await EnableEditMode();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Leave Details Slider");
+            Snackbar.Add("Error loading leave details. Please try again.", Severity.Error);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var newRequestId = LeaveRequest?.RequestId ?? 0;
+        if (newRequestId != 0 && newRequestId != _prevRequestId && _tenantId != 0)
+        {
+            _prevRequestId = newRequestId;
+            _isEditMode = false;
+            _isSaving = false;
+            _editRequest = new UpdateLeaveOtRequestDto
+            {
+                RequestId = SelectedLeaveRequest.RequestId,
+                StaffId = SelectedLeaveRequest.StaffId,
+                RequestTypeId = SelectedLeaveRequest.RequestTypeId,
+                LeaveTypeId = SelectedLeaveRequest.LeaveTypeId,
+                FromDate = SelectedLeaveRequest.FromDate,
+                ToDate = SelectedLeaveRequest.ToDate,
+                Reason = SelectedLeaveRequest.Reason,
+                ReportingManagerId = SelectedLeaveRequest.ReportingManagerId,
+                HRApprovalRequired = SelectedLeaveRequest.HRApprovalRequired,
+                TotalDays = SelectedLeaveRequest.TotalDays,
+                TotalHours = SelectedLeaveRequest.TotalHours
+            };
+            _fromDate = SelectedLeaveRequest.FromDate;
+            _toDate = SelectedLeaveRequest.ToDate;
+            _editTotalDays = SelectedLeaveRequest.TotalDays;
+            _editTotalHours = SelectedLeaveRequest.TotalHours;
+            await CalculateDaysForView();
+
+            if (StartInEditMode)
+            {
+                await EnableEditMode();
+            }
+        }
+    }
+
+    private async Task HandleOutsideClick()
+    {
+        if (!_isEditMode)
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+
+    public async Task EnableEditMode()
+    {
+        if (!IsPendingStatus)
+        {
+            Snackbar.Add("Only pending leaves can be edited.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            // Load leave types from LeaveTypeMaster table
+            var leaveTypes = await LeaveTypeMasterService.GetByTenantIdAsync(_tenantId);
+            _leaveTypes = leaveTypes?.ToList() ?? new List<LeaveTypeMasterDto>();
+
+            _isEditMode = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading leave types for edit mode");
+            Snackbar.Add("Error loading leave types. Please try again.", Severity.Error);
+        }
+    }
+
+    private void CancelEdit()
+    {
+        _isEditMode = false;
+        // Reset to original values
+            _editRequest = new UpdateLeaveOtRequestDto
+            {
+                RequestId = SelectedLeaveRequest.RequestId,
+                StaffId = SelectedLeaveRequest.StaffId,
+                RequestTypeId = SelectedLeaveRequest.RequestTypeId,
+                LeaveTypeId = SelectedLeaveRequest.LeaveTypeId,
+                FromDate = SelectedLeaveRequest.FromDate,
+                ToDate = SelectedLeaveRequest.ToDate,
+                Reason = SelectedLeaveRequest.Reason,
+                ReportingManagerId = SelectedLeaveRequest.ReportingManagerId,
+                HRApprovalRequired = SelectedLeaveRequest.HRApprovalRequired,
+                TotalDays = SelectedLeaveRequest.TotalDays,
+                TotalHours = SelectedLeaveRequest.TotalHours
+            };
+            _fromDate = SelectedLeaveRequest.FromDate;
+            _toDate = SelectedLeaveRequest.ToDate;
+            _editTotalDays = SelectedLeaveRequest.TotalDays;
+            _editTotalHours = SelectedLeaveRequest.TotalHours;
+        StateHasChanged();
+    }
+
+    private async Task OnFromDateChanged(DateTime? date)
+    {
+        _fromDate = date;
+        _editRequest.FromDate = date ?? DateTime.Today;
+        if (date.HasValue && _toDate.HasValue)
+        {
+            await RecalculateDays();
+        }
+    }
+
+    private async Task OnToDateChanged(DateTime? date)
+    {
+        _toDate = date;
+        _editRequest.ToDate = date ?? DateTime.Today;
+        if (_fromDate.HasValue && date.HasValue)
+        {
+            await RecalculateDays();
+        }
+    }
+
+    private async Task CalculateDaysForView()
+    {
+        if (SelectedLeaveRequest.FromDate != null && SelectedLeaveRequest.ToDate != null)
+        {
+            try
+            {
+                _calculatedDays = await LeaveOtService.CalculateLeaveDaysAsync(
+                    SelectedLeaveRequest.FromDate, 
+                    SelectedLeaveRequest.ToDate, 
+                    _tenantId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error calculating days for view");
+                _calculatedDays = SelectedLeaveRequest.TotalDays ?? 0;
+            }
+        }
+        else
+        {
+            _calculatedDays = SelectedLeaveRequest.TotalDays ?? 0;
+        }
+    }
+
+    private async Task RecalculateDays()
+    {
+        if (_fromDate.HasValue && _toDate.HasValue && _fromDate <= _toDate)
+        {
+            try
+            {
+                var days = await LeaveOtService.CalculateLeaveDaysAsync(_fromDate.Value, _toDate.Value, _tenantId);
+                _editRequest.TotalDays = days;
+                _editTotalDays = days;
+                
+                // Calculate hours: 8 hours per day (standard work day)
+                var hours = days * 8;
+                _editRequest.TotalHours = hours;
+                _editTotalHours = hours;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error recalculating days");
+                Snackbar.Add("Error calculating days. Please try again.", Severity.Warning);
+            }
+        }
+    }
+
+    private void OnTotalDaysChanged(decimal? value)
+    {
+        _editTotalDays = value;
+        _editRequest.TotalDays = value;
+    }
+
+    private void OnTotalHoursChanged(decimal? value)
+    {
+        _editTotalHours = value;
+        _editRequest.TotalHours = value;
+    }
+
+    private async Task OnLeaveTypeChanged(int? value)
+    {
+        _editRequest.LeaveTypeId = value;
+        if (_fromDate.HasValue && _toDate.HasValue)
+        {
+            await RecalculateDays();
+        }
+    }
+
+    private async Task SaveChanges()
+    {
+        if (!isValid)
+        {
+            Snackbar.Add("Please fill in all required fields.", Severity.Warning);
+            return;
+        }
+
+        if (!_fromDate.HasValue || !_toDate.HasValue)
+        {
+            Snackbar.Add("Please select valid dates.", Severity.Warning);
+            return;
+        }
+
+        if (_fromDate > _toDate)
+        {
+            Snackbar.Add("From date cannot be after to date.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _isSaving = true;
+            _editRequest.FromDate = _fromDate.Value;
+            _editRequest.ToDate = _toDate.Value;
+            _editRequest.TotalDays = _editTotalDays;
+            _editRequest.TotalHours = _editTotalHours;
+
+            // Handle attachment update if new file selected
+            if (_editSelectedAttachment != null)
+            {
+                try
+                {
+                    // Delete old attachment if exists
+                    if (!string.IsNullOrEmpty(_editRequest.Attachment))
+                    {
+                        await FileStorageService.DeleteFileAsync(_editRequest.Attachment);
+                    }
+
+                    // Upload new attachment
+                    using var stream = _editSelectedAttachment.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                    var attachmentPath = await FileStorageService.SaveLeaveAttachmentAsync(
+                        _tenantId, SelectedLeaveRequest.StaffId, SelectedLeaveRequest.RequestId,
+                        stream, _editSelectedAttachment.Name);
+                    _editRequest.Attachment = attachmentPath;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error uploading attachment during edit");
+                    Snackbar.Add("Error uploading attachment. Please try again.", Severity.Error);
+                    _isSaving = false;
+                    return;
+                }
+            }
+
+            await OnSave.InvokeAsync(_editRequest);
+            _isEditMode = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving leave changes");
+            Snackbar.Add("Error saving changes. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task HandleCancel()
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this leave request?");
+        if (confirmed)
+        {
+            await OnCancel.InvokeAsync(SelectedLeaveRequest.RequestId);
+        }
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToUpper() switch
+        {
+            "PENDING" => Color.Warning,
+            "APPROVED" => Color.Success,
+            "REJECTED" => Color.Error,
+            "CANCELLED" => Color.Default,
+            _ => Color.Default
+        };
+    }
+
+    private void HandleEditAttachmentSelected(InputFileChangeEventArgs e)
+    {
+        if (e.File != null)
+        {
+            const long maxFileSize = 5 * 1024 * 1024;
+            if (e.File.Size > maxFileSize)
+            {
+                Snackbar.Add("File size must be less than 5MB", Severity.Warning);
+                return;
+            }
+
+            var ext = Path.GetExtension(e.File.Name).ToLowerInvariant();
+            var allowedExtensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" };
+            if (!allowedExtensions.Contains(ext))
+            {
+                Snackbar.Add("Only PDF, JPG, and PNG files are allowed", Severity.Warning);
+                return;
+            }
+
+            _editSelectedAttachment = e.File;
+            StateHasChanged();
+        }
+    }
+
+    private void RemoveAttachment()
+    {
+        _editRequest.Attachment = null;
+        _editSelectedAttachment = null;
+        StateHasChanged();
+    }
+
+    private async Task DownloadAttachment()
+    {
+        if (!string.IsNullOrEmpty(SelectedLeaveRequest.Attachment))
+        {
+            var url = FileStorageService.GetFileUrl(SelectedLeaveRequest.Attachment);
+            await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+        }
+    }
+
+    [Inject] private AuthenticationStateProvider AuthenticationStateProvider { get; set; } = null!;
+}
+

@@ -1,0 +1,321 @@
+@page "/tms/my-courses"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICourseParticipantService ParticipantService
+@inject IUserService UserService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<MyCourses> Logger
+
+<PageTitle>My Courses</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="mb-4">
+        <MudText Typo="Typo.h4" Style="font-weight:600; color:#1a237e; margin-bottom:4px;">My Courses</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Your assigned training courses and history</MudText>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        <!-- Stats Row -->
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="6" sm="3">
+                <MudPaper Elevation="2" Class="pa-3 text-center" Style="border-radius:10px; background:linear-gradient(135deg,#667eea,#764ba2); color:white;">
+                    <MudText Typo="Typo.h4" Style="font-weight:bold;">@_allCourses.Count</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.9;">Total</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Elevation="2" Class="pa-3 text-center" Style="border-radius:10px; background:linear-gradient(135deg,#4facfe,#00f2fe); color:white;">
+                    <MudText Typo="Typo.h4" Style="font-weight:bold;">@_allCourses.Count(c => c.Status == "Upcoming")</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.9;">Upcoming</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Elevation="2" Class="pa-3 text-center" Style="border-radius:10px; background:linear-gradient(135deg,#43e97b,#38f9d7); color:white;">
+                    <MudText Typo="Typo.h4" Style="font-weight:bold;">@_allCourses.Count(c => c.Status == "Ongoing")</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.9;">Ongoing</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudPaper Elevation="2" Class="pa-3 text-center" Style="border-radius:10px; background:linear-gradient(135deg,#f093fb,#f5576c); color:white;">
+                    <MudText Typo="Typo.h4" Style="font-weight:bold;">@_allCourses.Count(c => c.Status == "Completed")</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.9;">Completed</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Tabs -->
+        <MudPaper Elevation="2" Style="border-radius:8px;">
+            <MudTabs Elevation="0" Rounded="true" Color="Color.Primary" @bind-ActivePanelIndex="_activeTab">
+                <MudTabPanel Text="All" Icon="@Icons.Material.Filled.List">
+                    <div class="pa-3">
+                        @CourseGrid(_allCourses)
+                    </div>
+                </MudTabPanel>
+                <MudTabPanel Text="Upcoming" Icon="@Icons.Material.Filled.Schedule">
+                    <div class="pa-3">
+                        @CourseGrid(_allCourses.Where(c => c.Status == "Upcoming").ToList())
+                    </div>
+                </MudTabPanel>
+                <MudTabPanel Text="Ongoing" Icon="@Icons.Material.Filled.PlayCircle">
+                    <div class="pa-3">
+                        @CourseGrid(_allCourses.Where(c => c.Status == "Ongoing").ToList())
+                    </div>
+                </MudTabPanel>
+                <MudTabPanel Text="Completed" Icon="@Icons.Material.Filled.CheckCircle">
+                    <div class="pa-3">
+                        @CourseGrid(_allCourses.Where(c => c.Status == "Completed").ToList())
+                    </div>
+                </MudTabPanel>
+            </MudTabs>
+        </MudPaper>
+    }
+</MudContainer>
+
+<!-- QR Code Dialog -->
+<MudDialog @bind-Visible="_qrDialogVisible" Options="@(new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.QrCode2" Class="mr-2" />
+            Attendance QR Code
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_qrCourse != null)
+        {
+            <div class="text-center">
+                <MudText Typo="Typo.subtitle1" Style="font-weight:600; color:#1a237e;" Class="mb-1">@_qrCourse.CourseTitle</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">@_qrCourse.CourseCode</MudText>
+
+                @if (!string.IsNullOrEmpty(_qrImageBase64))
+                {
+                    <div class="d-flex justify-center mb-3">
+                        <img src="@_qrImageBase64" alt="Attendance QR Code"
+                             style="width:200px; height:200px; border:2px solid #e0e0e0; border-radius:8px;" />
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Scan this QR code to mark your attendance
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @_qrCourse.StartDate.ToString("dd MMM yyyy") – @_qrCourse.EndDate.ToString("dd MMM yyyy")
+                    </MudText>
+                }
+                else
+                {
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                }
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   OnClick="@(() => Navigation.NavigateTo($"/tms/attendance/mark/{_qrCourse?.CoursePlanId}"))">
+            Mark Attendance
+        </MudButton>
+        <MudButton Variant="Variant.Text" OnClick="@(() => _qrDialogVisible = false)">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<MyCourseSummaryDto> _allCourses = new();
+    private bool _isLoading = true;
+    private int _activeTab = 0;
+    private int _tenantId;
+    private int _userId;
+    private int _staffId;
+
+    // QR dialog state
+    private bool _qrDialogVisible = false;
+    private MyCourseSummaryDto? _qrCourse;
+    private string? _qrImageBase64;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo("/signin");
+            return;
+        }
+
+        var userIdClaim    = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var tenantIdClaim  = user.FindFirst("TenantId")?.Value;
+
+        if (!int.TryParse(userIdClaim,   out _userId) ||
+            !int.TryParse(tenantIdClaim, out _tenantId))
+        {
+            _isLoading = false;
+            return;
+        }
+
+        try
+        {
+            var userEntity = await UserService.GetByIdAsync(_userId, _tenantId);
+            if (userEntity?.StaffId.HasValue == true)
+            {
+                _staffId = userEntity.StaffId.Value;
+                var courses = await ParticipantService.GetMyCoursesAsync(_staffId, _tenantId);
+                _allCourses = courses.ToList();
+            }
+            else
+            {
+                Snackbar.Add("Staff profile not linked. Contact your administrator.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading courses for UserId: {UserId}", _userId);
+            Snackbar.Add("Error loading courses. Please try again.", Severity.Error);
+        }
+
+        _isLoading = false;
+    }
+
+    private RenderFragment CourseGrid(List<MyCourseSummaryDto> list) => __builder =>
+    {
+        if (list.Count == 0)
+        {
+            <MudPaper Elevation="0" Class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Outlined.School" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">No courses found</MudText>
+            </MudPaper>
+        }
+        else
+        {
+            <MudGrid Spacing="3">
+                @foreach (var course in list)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        @CourseCard(course)
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    };
+
+    private RenderFragment CourseCard(MyCourseSummaryDto c) => __builder =>
+    {
+        var chipColor = c.Status == "Upcoming" ? Color.Info
+                      : c.Status == "Ongoing"  ? Color.Success
+                                               : Color.Default;
+        <MudCard Elevation="2" Style="border-radius:10px; overflow:hidden;">
+            <!-- Header -->
+            <div style="background:linear-gradient(135deg,#1a237e,#283593); color:white; padding:12px 16px;">
+                <div style="font-weight:600; font-size:1rem; margin-bottom:4px;">@c.CourseTitle</div>
+                <div style="font-size:0.75rem; opacity:0.8;">@(c.CourseCode ?? "")</div>
+            </div>
+
+            <MudCardContent Class="pa-3">
+                <MudChip T="string" Size="Size.Small" Color="@chipColor" Class="mb-2">@c.Status</MudChip>
+
+                <div style="font-size:0.82rem;">
+                    <div class="d-flex mb-1">
+                        <span style="color:#666; min-width:80px;">Dates:</span>
+                        <strong>@c.StartDate.ToString("dd MMM yyyy") – @c.EndDate.ToString("dd MMM yyyy")</strong>
+                    </div>
+                    <div class="d-flex mb-1">
+                        <span style="color:#666; min-width:80px;">Trainer:</span>
+                        <strong>@c.TrainerName</strong>
+                    </div>
+                    <div class="d-flex mb-1">
+                        <span style="color:#666; min-width:80px;">Venue:</span>
+                        <strong>@c.Venue</strong>
+                    </div>
+                    <div class="d-flex mb-1">
+                        <span style="color:#666; min-width:80px;">Duration:</span>
+                        <strong>@c.CourseDuration hrs</strong>
+                    </div>
+                    @if (c.Status != "Upcoming")
+                    {
+                        <div class="d-flex mb-1">
+                            <span style="color:#666; min-width:80px;">Attendance:</span>
+                            <strong>@c.AttendancePercentage.ToString("F1")%</strong>
+                        </div>
+                        @if (c.ResultStatus != null)
+                        {
+                            <div class="d-flex mb-1">
+                                <span style="color:#666; min-width:80px;">Result:</span>
+                                <strong>@c.ResultStatus</strong>
+                            </div>
+                        }
+                        @if (c.Marks.HasValue)
+                        {
+                            <div class="d-flex mb-1">
+                                <span style="color:#666; min-width:80px;">Marks:</span>
+                                <strong>@c.Marks.Value.ToString("F1")%</strong>
+                            </div>
+                        }
+                    }
+                </div>
+            </MudCardContent>
+
+            <MudCardActions Class="pa-2" Style="border-top:1px solid #e0e0e0; gap:4px; flex-wrap:wrap;">
+                @if (c.Status == "Ongoing")
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.QrCode2"
+                               OnClick="@(() => ShowQrCode(c))">
+                        Show QR
+                    </MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.HowToReg"
+                               OnClick="@(() => Navigation.NavigateTo($"/tms/attendance/mark/{c.CoursePlanId}"))">
+                        Mark Attendance
+                    </MudButton>
+                }
+                @if (!string.IsNullOrEmpty(c.CertificatePath))
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.CardMembership"
+                               OnClick="@(() => Navigation.NavigateTo(c.CertificatePath!))">
+                        Certificate
+                    </MudButton>
+                }
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                           OnClick="@(() => Navigation.NavigateTo($"/tms/planning/view/{c.CoursePlanId}?from=my-courses"))">
+                    Details
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    };
+
+    private void ShowQrCode(MyCourseSummaryDto course)
+    {
+        _qrCourse = course;
+        _qrImageBase64 = null;
+        _qrDialogVisible = true;
+
+        // Generate QR code for the attendance mark URL
+        var attendanceUrl = $"{Navigation.BaseUri.TrimEnd('/')}/tms/attendance/mark/{course.CoursePlanId}";
+        _qrImageBase64 = GenerateQrCodeBase64(attendanceUrl);
+    }
+
+    private static string GenerateQrCodeBase64(string content)
+    {
+        try
+        {
+            using var qrGenerator = new QRCoder.QRCodeGenerator();
+            using var qrData      = qrGenerator.CreateQrCode(content, QRCoder.QRCodeGenerator.ECCLevel.M);
+            using var qrCode      = new QRCoder.QRCode(qrData);
+            using var qrImage     = qrCode.GetGraphic(6);
+            using var ms          = new System.IO.MemoryStream();
+            qrImage.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+            return $"data:image/png;base64,{Convert.ToBase64String(ms.ToArray())}";
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+}

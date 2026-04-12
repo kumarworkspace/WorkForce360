@@ -1,0 +1,41 @@
+﻿@inject IJSRuntime JSRuntime
+
+<div class="dropdown-wrapper" style="width: 90%;">
+    <select id="@Id" multiple="multiple" style="width: 100%; height: 40px; padding: 10px 16px; border-radius: 6px; border: 1px solid var(--Border-Neutral-Default, #A5B3CA); z-index: 9000;">
+        @foreach (var item in Items)
+        {
+            <option value="@item.Value">@item.Text</option>
+        }
+    </select>
+</div>
+
+@code {
+    private DotNetObjectReference<Select2Multi> objRef;
+
+    [Parameter] public string Id { get; set; } = Guid.NewGuid().ToString();
+    [Parameter] public List<SelectItem> Items { get; set; } = new();
+    [Parameter] public string Placeholder { get; set; } = "Select options";
+    [Parameter] public EventCallback<List<string>> OnSelectedChanged { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            objRef = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("initSelect2Multi", Id, Placeholder, objRef);
+        }
+    }
+
+    [JSInvokable]
+    public async Task NotifySelectionChanged(List<string> selectedValues)
+    {
+        await OnSelectedChanged.InvokeAsync(selectedValues);
+    }
+
+
+    public class SelectItem
+    {
+        public string Value { get; set; }
+        public string Text { get; set; }
+    }
+}

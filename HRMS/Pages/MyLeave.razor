@@ -1,0 +1,698 @@
+@page "/hrms/leave"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILeaveOtService LeaveOtService
+@inject IStaffService StaffService
+@inject IMasterDropdownService MasterDropdownService
+@inject IUserService UserService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<MyLeave> Logger
+@using HRMS.Core.Domain.Entities
+@using HRMS.Core.Domain.Enums
+@inject HRMS.Core.Domain.Interfaces.IUnitOfWork UnitOfWork
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IDialogService DialogService
+
+<PageTitle>Leave Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-0" Style="height: 100vh; overflow: hidden;">
+    <!-- Header -->
+    <MudPaper Elevation="0" Class="pa-4 mb-2" Style="background: white; border-bottom: 1px solid #e0e0e0;">
+        <div class="d-flex align-center justify-space-between">
+            <div>
+                <MudText Typo="Typo.h5" Style="font-weight: 600; color: #1a237e;">Leave Management</MudText>
+            </div>
+        </div>
+    </MudPaper>
+
+    <div class="d-flex" style="height: calc(100vh - 100px); overflow: hidden;">
+        <!-- Left Panel: Leave History -->
+        <div style="flex: 1; overflow-y: auto; padding: 16px; background: #f5f5f5;">
+
+            <!-- Leave History Section -->
+            <MudPaper Elevation="2" Class="pa-4" Style="background: white; border-radius: 8px;">
+                <div class="d-flex align-center justify-space-between mb-3">
+                    <MudText Typo="Typo.h6" Style="font-weight: 600;">Leave requests Status & History</MudText>
+                    <div class="d-flex align-center" style="gap: 12px;">
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Primary"
+                                  StartIcon="@Icons.Material.Filled.Add"
+                                  OnClick="NavigateToRequest"
+                                  Size="Size.Medium"
+                                  Style="box-shadow: 0 2px 4px rgba(0,0,0,0.1); background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">
+                            APPLY LEAVE
+                        </MudButton>
+                    </div>
+                </div>
+
+                <MudGrid Class="mb-3">
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudSelect T="int?" Value="@_historyYear" 
+                                  ValueChanged="OnHistoryYearChanged"
+                                  Label="Year"
+                                  Variant="Variant.Outlined"
+                                  Dense="true"
+                                  Clearable="true"
+                                  FullWidth="@true">
+                            @if (_availableYears != null && _availableYears.Any())
+                            {
+                                @foreach (var year in _availableYears.OrderByDescending(y => y))
+                                {
+                                    <MudSelectItem T="int?" Value="@((int?)year)">@year</MudSelectItem>
+                                }
+                            }
+                            else
+                            {
+                                <MudSelectItem T="int?" Value="@((int?)DateTime.Now.Year)">@DateTime.Now.Year</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudSelect T="string" Value="@_filterRequestType" 
+                                  ValueChanged="OnRequestTypeFilterChanged"
+                                  Label="Request Type"
+                                  Variant="Variant.Outlined"
+                                  Dense="true"
+                                  Clearable="true"
+                                  FullWidth="@true">
+                            @foreach (var requestType in _requestTypes)
+                            {
+                                <MudSelectItem T="string" Value="@requestType.Name">@requestType.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudSelect T="string" Value="@_filterStatus" 
+                                  ValueChanged="OnStatusFilterChanged"
+                                  Label="Status"
+                                  Variant="Variant.Outlined"
+                                  Dense="true"
+                                  Clearable="true"
+                                  FullWidth="@true">
+                            <MudSelectItem T="string" Value="@("PENDING")">PENDING</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("APPROVED")">APPROVED</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("REJECTED")">REJECTED</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("CANCELLED")">CANCELLED</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudButton Variant="Variant.Outlined" 
+                                  Color="Color.Primary" 
+                                  OnClick="ClearAllFilters"
+                                  Size="Size.Medium"
+                                  FullWidth="@true"
+                                  Class="mt-6"
+                                  StartIcon="@Icons.Material.Filled.Clear">
+                            Clear Filters
+                        </MudButton>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudDatePicker Date="@_fromDateFilter"
+                                      DateChanged="OnFromDateFilterChanged"
+                                      Label="From Date"
+                                      Variant="Variant.Outlined"
+                                      Dense="true"
+                                      Clearable="true"
+                                      FullWidth="@true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudDatePicker Date="@_toDateFilter"
+                                      DateChanged="OnToDateFilterChanged"
+                                      Label="To Date"
+                                      Variant="Variant.Outlined"
+                                      Dense="true"
+                                      MinDate="@_fromDateFilter"
+                                      Clearable="true"
+                                      FullWidth="@true" />
+                    </MudItem>
+                </MudGrid>
+
+                @if (_isLoading)
+                {
+                    <MudProgressLinear Indeterminate="true" />
+                }
+                else if (!_filteredRequests.Any() && !_isLoading)
+                {
+                    <MudAlert Severity="Severity.Info">No leave requests found.</MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="@_paginatedRequests" Hover="true" Dense="true" Elevation="0" Style="border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                        <HeaderContent>
+                            <MudTh Style="font-weight: 600; background-color: #f5f5f5;">REQUEST TYPE</MudTh>
+                            <MudTh Style="font-weight: 600; background-color: #f5f5f5;">LEAVE TYPE</MudTh>
+                            <MudTh Style="font-weight: 600; background-color: #f5f5f5;">FROM DATE / TO DATE</MudTh>
+                            <MudTh Style="font-weight: 600; background-color: #f5f5f5; text-align: center;">DAYS / HOURS</MudTh>
+                            <MudTh Style="font-weight: 600; background-color: #f5f5f5;">STATUS</MudTh>
+                            <MudTh Style="font-weight: 600; background-color: #f5f5f5;">REPORTING MANAGER</MudTh>
+                            <MudTh Style="font-weight: 600; background-color: #f5f5f5;">CREATED DATE</MudTh>
+                            <MudTh Style="font-weight: 600; background-color: #f5f5f5;">Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudText Typo="Typo.body2" Style="font-weight: 600;">
+                                    @(context.RequestTypeName ?? "N/A")
+                                </MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.body2">
+                                    @(context.LeaveTypeName ?? "N/A")
+                                </MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.body2">
+                                    @context.FromDate.ToString("dd MMM yyyy")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    to @context.ToDate.ToString("dd MMM yyyy")
+                                </MudText>
+                            </MudTd>
+                            <MudTd Style="text-align: center;">
+                                @if (context.TotalDays.HasValue && context.TotalDays.Value > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
+                                        @context.TotalDays.Value.ToString("0.0") days
+                                    </MudChip>
+                                }
+                                else if (context.TotalHours.HasValue && context.TotalHours.Value > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
+                                        @context.TotalHours.Value.ToString("0.0") hrs
+                                    </MudChip>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2">-</MudText>
+                                }
+                            </MudTd>
+                            <MudTd>
+                                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.LeaveStatusName ?? "Unknown")">
+                                    @(context.LeaveStatusName ?? "Unknown")
+                                </MudChip>
+                            </MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.body2">
+                                    @(context.ReportingManagerName ?? "N/A")
+                                </MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.body2">
+                                    @context.CreatedDate.ToString("dd MMM yyyy")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @context.CreatedDate.ToString("hh:mm tt")
+                                </MudText>
+                            </MudTd>
+                            <MudTd>
+                                <div class="d-flex align-center" style="gap: 8px;">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                  Color="Color.Info"
+                                                  Size="Size.Small"
+                                                  Title="View"
+                                                  OnClick="@(() => OpenLeaveDetails(context))" />
+                                    @if (context.LeaveStatusName?.ToUpper() == "PENDING")
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                      Color="Color.Primary"
+                                                      Size="Size.Small"
+                                                      Title="Edit"
+                                                      OnClick="@(() => HandleEditRequest(context))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                      Color="Color.Error"
+                                                      Size="Size.Small"
+                                                      Title="Delete"
+                                                      OnClick="@(() => HandleDeleteRequest(context))" />
+                                    }
+                                </div>
+                            </MudTd>
+                        </RowTemplate>
+                        <PagerContent>
+                            <MudTablePager T="LeaveOtRequestDto"
+                                          PageSizeOptions="new int[] { 10, 25, 50, 100 }"
+                                          InfoFormat=""
+                                          PageSize="@_pageSize"
+                                          Page="@_pageNumber"
+                                          TotalItems="@_filteredRequests.Count"
+                                          PageSizeChanged="OnPageSizeChanged"
+                                          PageChanged="OnPageChanged" />
+                        </PagerContent>
+                    </MudTable>
+                    
+                    @if (_filteredRequests.Any())
+                    {
+                        <div class="d-flex align-center justify-space-between pa-3" style="background-color: #f5f5f5; border-top: 1px solid #e0e0e0;">
+                            <MudText Typo="Typo.body2" Color="Color.Default">
+                                Showing <strong>@((_pageNumber - 1) * _pageSize + 1)</strong> - <strong>@(Math.Min(_pageNumber * _pageSize, _filteredRequests.Count))</strong> of <strong>@_filteredRequests.Count</strong> leave requests
+                            </MudText>
+                        </div>
+                    }
+                }
+            </MudPaper>
+        </div>
+
+        <!-- Right Slider Panel -->
+        @if (_selectedLeaveRequest != null)
+        {
+            <LeaveDetailsSlider LeaveRequest="@_selectedLeaveRequest"
+                               StaffInfo="@_staffInfo"
+                               StartInEditMode="@_openInEditMode"
+                               OnClose="CloseLeaveDetails"
+                               OnEdit="HandleEditLeave"
+                               OnCancel="HandleCancelLeave"
+                               OnSave="HandleSaveLeave" />
+        }
+    </div>
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private int _tenantId;
+    private int _userId;
+    private int? _staffId;
+    private int? _historyYear;
+    private string? _filterRequestType;
+    private string? _filterStatus;
+    private DateTime? _fromDateFilter;
+    private DateTime? _toDateFilter;
+
+    private StaffDto? _staffInfo;
+    private List<LeaveOtRequestDto> _allRequests = new();
+    private List<LeaveOtRequestDto> _filteredRequests = new();
+    private List<LeaveOtRequestDto> _paginatedRequests = new();
+    private List<MasterDropdown> _requestTypes = new();
+    private List<int> _availableYears = new();
+
+    private LeaveOtRequestDto? _selectedLeaveRequest;
+    private bool _openInEditMode = false;
+    
+    // Pagination
+    private int _pageNumber = 1;
+    private int _pageSize = 25;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                Navigation.NavigateTo("/dashboard");
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+
+            var userEntity = await UserService.GetByIdAsync(_userId, _tenantId);
+            if (userEntity != null && userEntity.StaffId.HasValue)
+            {
+                _staffId = userEntity.StaffId.Value;
+            }
+
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing My Leave page. Exception: {ExceptionMessage}, InnerException: {InnerException}, StackTrace: {StackTrace}", 
+                ex.Message, ex.InnerException?.Message, ex.StackTrace);
+            var errorMessage = ex.InnerException != null 
+                ? $"Error loading page: {ex.InnerException.Message}" 
+                : $"Error loading page: {ex.Message}";
+            Snackbar.Add(errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            _isLoading = true;
+
+            if (!_staffId.HasValue)
+            {
+                Logger.LogWarning("No StaffId found for user {UserId}", _userId);
+                Snackbar.Add("Staff record not found. Please contact your administrator.", Severity.Warning);
+                _isLoading = false;
+                return;
+            }
+
+            Logger.LogInformation("Loading data for StaffId: {StaffId}, TenantId: {TenantId}", _staffId.Value, _tenantId);
+
+            // Load staff info
+            try
+            {
+                _staffInfo = await StaffService.GetByIdAsync(_staffId.Value, _tenantId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading staff info for StaffId: {StaffId}", _staffId.Value);
+                Snackbar.Add("Error loading staff information.", Severity.Warning);
+            }
+
+            // Load request types from MasterDropdown
+            try
+            {
+                var requestTypes = await MasterDropdownService.GetByCategoryAsync("RequestType", _tenantId);
+                _requestTypes = requestTypes?.ToList() ?? new List<MasterDropdown>();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading request types");
+                _requestTypes = new List<MasterDropdown>();
+            }
+
+            // Load leave requests
+            try
+            {
+                Logger.LogInformation("Attempting to load leave requests for StaffId: {StaffId}, TenantId: {TenantId}", _staffId.Value, _tenantId);
+                var requests = await LeaveOtService.GetByStaffIdAsync(_staffId.Value, _tenantId);
+                _allRequests = requests?.OrderByDescending(r => r.CreatedDate).ToList() ?? new List<LeaveOtRequestDto>();
+                
+                Logger.LogInformation("Loaded {Count} leave requests for StaffId: {StaffId}", _allRequests.Count, _staffId.Value);
+                
+                // Get distinct years from leave requests
+                _availableYears = _allRequests
+                    .Select(r => r.FromDate.Year)
+                    .Union(_allRequests.Select(r => r.ToDate.Year))
+                    .Distinct()
+                    .OrderByDescending(y => y)
+                    .ToList();
+                
+                // Set default year to current year or most recent year (but don't force filter)
+                if (!_availableYears.Any())
+                {
+                    _availableYears = new List<int> { DateTime.Now.Year };
+                }
+                
+                // Don't set default year filter - let user see all requests initially
+                // Only set if no requests exist to avoid confusion
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading leave requests for StaffId: {StaffId}. Exception: {ExceptionMessage}, InnerException: {InnerException}, StackTrace: {StackTrace}", 
+                    _staffId.Value, ex.Message, ex.InnerException?.Message, ex.StackTrace);
+                _allRequests = new List<LeaveOtRequestDto>();
+                _availableYears = new List<int> { DateTime.Now.Year };
+                
+                // Show more detailed error message
+                var errorMessage = ex.InnerException != null 
+                    ? $"Error loading leave requests: {ex.InnerException.Message}" 
+                    : $"Error loading leave requests: {ex.Message}";
+                Snackbar.Add(errorMessage, Severity.Error);
+            }
+
+            // Filter requests
+            try
+            {
+                await FilterRequestsAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error filtering requests");
+                _filteredRequests = new List<LeaveOtRequestDto>();
+                _paginatedRequests = new List<LeaveOtRequestDto>();
+            }
+
+            // Log view action (non-critical, don't fail if this fails)
+            try
+            {
+                await LogAuditActionAsync("View Leave History", $"Viewed leave history for year {_historyYear ?? DateTime.Now.Year}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Error logging audit action");
+                // Don't show error to user for audit logging failures
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error loading leave data");
+            Snackbar.Add("Error loading leave data. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task FilterRequestsAsync()
+    {
+        // Start with all requests
+        _filteredRequests = _allRequests.ToList();
+
+        // Filter by year if selected (but don't filter if no year selected - show all)
+        if (_historyYear.HasValue)
+        {
+            _filteredRequests = _filteredRequests.Where(r => 
+                r.FromDate.Year == _historyYear.Value || r.ToDate.Year == _historyYear.Value).ToList();
+        }
+
+        // Filter by date range - check if request overlaps with the filter range
+        if (_fromDateFilter.HasValue || _toDateFilter.HasValue)
+        {
+            var fromDate = _fromDateFilter?.Date ?? DateTime.MinValue;
+            var toDate = _toDateFilter?.Date ?? DateTime.MaxValue;
+            
+            _filteredRequests = _filteredRequests.Where(r => 
+                // Check if request dates overlap with filter range
+                (r.FromDate.Date <= toDate && r.ToDate.Date >= fromDate)).ToList();
+        }
+
+
+        // Filter by request type (only if a specific type is selected)
+        if (!string.IsNullOrWhiteSpace(_filterRequestType))
+        {
+            _filteredRequests = _filteredRequests.Where(r => r.RequestTypeName == _filterRequestType).ToList();
+        }
+
+        // Filter by status (only if a specific status is selected)
+        if (!string.IsNullOrWhiteSpace(_filterStatus))
+        {
+            _filteredRequests = _filteredRequests.Where(r => r.LeaveStatusName?.ToUpper() == _filterStatus.ToUpper()).ToList();
+        }
+        
+        // Apply pagination
+        ApplyPagination();
+    }
+    
+    private void ApplyPagination()
+    {
+        _pageNumber = 1; // Reset to first page when filters change
+        var skip = (_pageNumber - 1) * _pageSize;
+        _paginatedRequests = _filteredRequests.Skip(skip).Take(_pageSize).ToList();
+    }
+    
+    private Task OnPageChanged(int page)
+    {
+        _pageNumber = page;
+        var skip = (_pageNumber - 1) * _pageSize;
+        _paginatedRequests = _filteredRequests.Skip(skip).Take(_pageSize).ToList();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+    
+    private Task OnPageSizeChanged(int pageSize)
+    {
+        _pageSize = pageSize;
+        _pageNumber = 1; // Reset to first page when page size changes
+        var skip = (_pageNumber - 1) * _pageSize;
+        _paginatedRequests = _filteredRequests.Skip(skip).Take(_pageSize).ToList();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnFromDateFilterChanged(DateTime? date)
+    {
+        _fromDateFilter = date;
+        return FilterRequestsAsync();
+    }
+
+    private Task OnToDateFilterChanged(DateTime? date)
+    {
+        _toDateFilter = date;
+        return FilterRequestsAsync();
+    }
+
+    private Task ClearAllFilters()
+    {
+        _historyYear = null;
+        _filterRequestType = null;
+        _filterStatus = null;
+        _fromDateFilter = null;
+        _toDateFilter = null;
+        return FilterRequestsAsync();
+    }
+
+    private Task OnHistoryYearChanged(int? year)
+    {
+        _historyYear = year;
+        return FilterRequestsAsync();
+    }
+
+    private Task OnRequestTypeFilterChanged(string? value)
+    {
+        _filterRequestType = value;
+        return FilterRequestsAsync();
+    }
+
+    private Task OnStatusFilterChanged(string? value)
+    {
+        _filterStatus = value;
+        return FilterRequestsAsync();
+    }
+
+    private async Task OpenLeaveDetails(LeaveOtRequestDto request)
+    {
+        _openInEditMode = false;
+        _selectedLeaveRequest = request;
+        await LogAuditActionAsync("View Leave Details", $"Viewed leave details for request ID: {request.RequestId}", ActionType.View);
+        StateHasChanged();
+    }
+
+    private void CloseLeaveDetails()
+    {
+        _selectedLeaveRequest = null;
+        _openInEditMode = false;
+        StateHasChanged();
+    }
+
+    private void NavigateToRequest()
+    {
+        Navigation.NavigateTo("/hrms/leave/request");
+    }
+
+    private async Task HandleEditLeave(LeaveOtRequestDto request)
+    {
+        // Edit functionality handled in slider component
+        _selectedLeaveRequest = request;
+        StateHasChanged();
+    }
+
+    private async Task HandleCancelLeave(int requestId)
+    {
+        try
+        {
+            var ipAddress = HttpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+            await LeaveOtService.CancelRequestAsync(requestId, _tenantId, _userId, ipAddress);
+            Snackbar.Add("Leave request cancelled successfully", Severity.Success);
+            await LoadDataAsync();
+            CloseLeaveDetails();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error cancelling leave request");
+            Snackbar.Add("Error cancelling leave request. Please try again.", Severity.Error);
+        }
+    }
+
+    private async Task HandleSaveLeave(UpdateLeaveOtRequestDto request)
+    {
+        try
+        {
+            var ipAddress = HttpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+            await LeaveOtService.UpdateRequestAsync(request, _tenantId, _userId, ipAddress);
+            Snackbar.Add("Leave request updated successfully", Severity.Success);
+            await LoadDataAsync();
+            CloseLeaveDetails();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating leave request");
+            Snackbar.Add($"Error updating leave request: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void HandleEditRequest(LeaveOtRequestDto request)
+    {
+        Navigation.NavigateTo($"/hrms/leave/edit/{request.RequestId}");
+    }
+
+    private async Task HandleDeleteRequest(LeaveOtRequestDto request)
+    {
+        try
+        {
+            var result = await DialogService.ShowMessageBox(
+                "Delete Leave Request",
+                $"Are you sure you want to delete this leave request?\n\nDates: {request.FromDate:dd MMM yyyy} - {request.ToDate:dd MMM yyyy}\nType: {request.LeaveTypeName ?? "N/A"}",
+                yesText: "Delete", cancelText: "Cancel");
+
+            if (result == true)
+            {
+                var ipAddress = HttpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+                await LeaveOtService.CancelRequestAsync(request.RequestId, _tenantId, _userId, ipAddress);
+                Snackbar.Add("Leave request deleted successfully", Severity.Success);
+                await LoadDataAsync();
+                if (_selectedLeaveRequest?.RequestId == request.RequestId)
+                {
+                    CloseLeaveDetails();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting leave request");
+            Snackbar.Add($"Error deleting leave request: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToUpper() switch
+        {
+            "PENDING" => Color.Warning,
+            "APPROVED" => Color.Success,
+            "REJECTED" => Color.Error,
+            "CANCELLED" => Color.Default,
+            _ => Color.Default
+        };
+    }
+
+    private async Task LogAuditActionAsync(string action, string details, ActionType actionType = ActionType.View)
+    {
+        try
+        {
+            var ipAddress = HttpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+            var auditLog = new AuditLog
+            {
+                TenantId = _tenantId,
+                UserId = _userId,
+                ActionType = actionType,
+                Description = $"{action}: {details}",
+                IPAddress = ipAddress,
+                IsActive = true,
+                CreatedBy = _userId,
+                CreatedDate = DateTime.Now
+            };
+
+            await UnitOfWork.AuditLogs.AddAsync(auditLog);
+            await UnitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error logging audit action: {Action}", action);
+            // Don't throw - audit logging is non-critical
+        }
+    }
+}
+

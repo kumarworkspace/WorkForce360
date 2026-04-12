@@ -1,0 +1,334 @@
+@page "/tms/reports"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITMSReportService ReportService
+@inject IStaffService StaffService
+@inject ICourseRegistrationService CourseService
+@inject ISnackbar Snackbar
+@inject ILogger<TMSReports> Logger
+
+<PageTitle>TMS Reports</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="mb-4">
+        <MudText Typo="Typo.h4" Style="font-weight:600; color:#1a237e; margin-bottom:4px;">TMS Reports</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Training Management System — Analytics &amp; Reports</MudText>
+    </div>
+
+    <!-- Filters -->
+    <MudPaper Elevation="1" Class="pa-4 mb-4" Style="border-radius:12px;">
+        <MudGrid Spacing="2" AlignItems="Center">
+            <MudItem xs="12" sm="6" md="3">
+                <MudDatePicker Label="From Date" @bind-Date="_fromDate" Clearable="true"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudDatePicker Label="To Date" @bind-Date="_toDate" Clearable="true"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="int?" Label="Trainer" @bind-Value="_selectedTrainerId"
+                           Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var t in _trainers)
+                    {
+                        <MudSelectItem T="int?" Value="(int?)t.StaffId">@t.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="int?" Label="Course" @bind-Value="_selectedCourseId"
+                           Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var c in _courses)
+                    {
+                        <MudSelectItem T="int?" Value="(int?)c.CourseId">@c.Title</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" Class="d-flex gap-2 justify-end">
+                <MudButton Variant="Variant.Outlined" OnClick="ClearFilters">Clear</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadReports"
+                           StartIcon="@Icons.Material.Filled.Search">Generate Report</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Class="mb-4" />
+    }
+    else
+    {
+        <!-- Overall Summary KPIs -->
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border-radius:12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h3" Style="font-weight:bold;">@_summary.TotalCourses</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity:.9;">Total Courses</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Book" Size="Size.Large" Style="opacity:.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg,#f093fb,#f5576c);color:white;border-radius:12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h3" Style="font-weight:bold;">@_summary.TotalSessions</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity:.9;">Total Sessions</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.EventNote" Size="Size.Large" Style="opacity:.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg,#4facfe,#00f2fe);color:white;border-radius:12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h3" Style="font-weight:bold;">@_summary.TotalParticipantsEnrolled</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity:.9;">Participants Enrolled</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Large" Style="opacity:.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg,#43e97b,#38f9d7);color:white;border-radius:12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h3" Style="font-weight:bold;">@_summary.AvgAttendancePercentage.ToString("0.#")%</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity:.9;">Avg Attendance</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Style="opacity:.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Status chips -->
+        <MudStack Row="true" Class="mb-6" Spacing="2">
+            <MudChip T="string" Color="Color.Success"  Icon="@Icons.Material.Filled.Done">Completed: @_summary.CoursesCompleted</MudChip>
+            <MudChip T="string" Color="Color.Warning"  Icon="@Icons.Material.Filled.PlayArrow">Ongoing: @_summary.CoursesOngoing</MudChip>
+            <MudChip T="string" Color="Color.Info"     Icon="@Icons.Material.Filled.Schedule">Upcoming: @_summary.CoursesUpcoming</MudChip>
+        </MudStack>
+
+        <!-- Tabs for detailed reports -->
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+
+            <!-- Monthly Summary -->
+            <MudTabPanel Text="Monthly Summary" Icon="@Icons.Material.Filled.CalendarMonth">
+                @if (!_monthlySummary.Any())
+                {
+                    <MudAlert Severity="Severity.Info">No data found for the selected filters.</MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="_monthlySummary" Hover="true" Dense="true" Striped="true"
+                              Elevation="0" Style="border-radius:8px;">
+                        <HeaderContent>
+                            <MudTh>Month</MudTh>
+                            <MudTh Style="text-align:right;">Sessions</MudTh>
+                            <MudTh Style="text-align:right;">Participants</MudTh>
+                            <MudTh Style="text-align:right;">Present</MudTh>
+                            <MudTh Style="text-align:right;">Attendance %</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.MonthName</MudTd>
+                            <MudTd Style="text-align:right;">@context.TotalSessions</MudTd>
+                            <MudTd Style="text-align:right;">@context.TotalParticipants</MudTd>
+                            <MudTd Style="text-align:right;">@context.TotalPresent</MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(context.AvgAttendancePercentage >= 75 ? Color.Success : context.AvgAttendancePercentage >= 50 ? Color.Warning : Color.Error)">
+                                    @context.AvgAttendancePercentage.ToString("0.#")%
+                                </MudChip>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudTabPanel>
+
+            <!-- Trainer Performance -->
+            <MudTabPanel Text="Trainer Performance" Icon="@Icons.Material.Filled.Person">
+                @if (!_trainerPerformance.Any())
+                {
+                    <MudAlert Severity="Severity.Info">No data found for the selected filters.</MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="_trainerPerformance" Hover="true" Dense="true" Striped="true"
+                              Elevation="0" Style="border-radius:8px;">
+                        <HeaderContent>
+                            <MudTh>Trainer</MudTh>
+                            <MudTh>Employee Code</MudTh>
+                            <MudTh>Department</MudTh>
+                            <MudTh Style="text-align:right;">Courses Conducted</MudTh>
+                            <MudTh Style="text-align:right;">Participants Trained</MudTh>
+                            <MudTh Style="text-align:right;">Avg Attendance %</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudText Style="font-weight:500;">@context.TrainerName</MudText>
+                            </MudTd>
+                            <MudTd>@(context.EmployeeCode ?? "—")</MudTd>
+                            <MudTd>@(context.Department ?? "—")</MudTd>
+                            <MudTd Style="text-align:right;">@context.TotalCoursesConducted</MudTd>
+                            <MudTd Style="text-align:right;">@context.TotalParticipantsTrained</MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(context.AvgAttendancePercentage >= 75 ? Color.Success : context.AvgAttendancePercentage >= 50 ? Color.Warning : Color.Error)">
+                                    @context.AvgAttendancePercentage.ToString("0.#")%
+                                </MudChip>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudTabPanel>
+
+            <!-- Course-wise Report -->
+            <MudTabPanel Text="Course-wise" Icon="@Icons.Material.Filled.TableChart">
+                @if (!_courseWiseReport.Any())
+                {
+                    <MudAlert Severity="Severity.Info">No data found for the selected filters.</MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="_courseWiseReport" Hover="true" Dense="true" Striped="true"
+                              Elevation="0" Style="border-radius:8px;">
+                        <HeaderContent>
+                            <MudTh>Course Title</MudTh>
+                            <MudTh>Course Code</MudTh>
+                            <MudTh>Category</MudTh>
+                            <MudTh Style="text-align:right;">Sessions</MudTh>
+                            <MudTh Style="text-align:right;">Enrolled</MudTh>
+                            <MudTh Style="text-align:right;">Present</MudTh>
+                            <MudTh Style="text-align:right;">Attendance %</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudText Style="font-weight:500;">@context.CourseTitle</MudText>
+                            </MudTd>
+                            <MudTd>@(context.CourseCode ?? "—")</MudTd>
+                            <MudTd>@(context.Category ?? "—")</MudTd>
+                            <MudTd Style="text-align:right;">@context.TotalSessions</MudTd>
+                            <MudTd Style="text-align:right;">@context.TotalParticipantsEnrolled</MudTd>
+                            <MudTd Style="text-align:right;">@context.TotalPresent</MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(context.AvgAttendancePercentage >= 75 ? Color.Success : context.AvgAttendancePercentage >= 50 ? Color.Warning : Color.Error)">
+                                    @context.AvgAttendancePercentage.ToString("0.#")%
+                                </MudChip>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudTabPanel>
+
+        </MudTabs>
+    }
+</MudContainer>
+
+@code {
+    private int    _tenantId;
+    private bool   _loading = true;
+
+    // Filters
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private int?      _selectedTrainerId;
+    private int?      _selectedCourseId;
+
+    // Dropdown data
+    private List<StaffListDto>    _trainers = new();
+    private List<CourseListDto>   _courses  = new();
+
+    // Report data
+    private TMSOverallSummaryDto              _summary          = new();
+    private List<TMSMonthlySummaryDto>        _monthlySummary   = new();
+    private List<TMSTrainerPerformanceDto>    _trainerPerformance = new();
+    private List<TMSCourseWiseReportDto>      _courseWiseReport = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth  = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user  = auth.User;
+
+        _tenantId = int.TryParse(user.FindFirst("TenantId")?.Value, out var tid) ? tid : 0;
+
+        // Default range: current year
+        _fromDate = new DateTime(DateTime.Today.Year, 1, 1);
+        _toDate   = DateTime.Today;
+
+        await Task.WhenAll(LoadDropdowns(), LoadReports());
+    }
+
+    private async Task LoadDropdowns()
+    {
+        try
+        {
+            var staffResult  = await StaffService.GetPagedAsync(_tenantId, 1, 1000, null, null, null);
+            var courseResult = await CourseService.GetPagedAsync(_tenantId, 1, 1000);
+
+            _trainers = staffResult.Items.ToList();
+            _courses  = courseResult.Items.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading TMS report dropdowns");
+        }
+    }
+
+    private async Task LoadReports()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var filter = new TMSReportFilter
+        {
+            TenantId  = _tenantId,
+            FromDate  = _fromDate,
+            ToDate    = _toDate,
+            TrainerId = _selectedTrainerId,
+            CourseId  = _selectedCourseId
+        };
+
+        try
+        {
+            var summaryTask   = ReportService.GetOverallSummaryAsync(filter);
+            var monthlyTask   = ReportService.GetMonthlySummaryAsync(filter);
+            var trainerTask   = ReportService.GetTrainerPerformanceAsync(filter);
+            var courseTask    = ReportService.GetCourseWiseReportAsync(filter);
+
+            await Task.WhenAll(summaryTask, monthlyTask, trainerTask, courseTask);
+
+            _summary            = await summaryTask;
+            _monthlySummary     = (await monthlyTask).ToList();
+            _trainerPerformance = (await trainerTask).ToList();
+            _courseWiseReport   = (await courseTask).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading TMS reports");
+            Snackbar.Add("Failed to load reports. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        _fromDate          = new DateTime(DateTime.Today.Year, 1, 1);
+        _toDate            = DateTime.Today;
+        _selectedTrainerId = null;
+        _selectedCourseId  = null;
+        await LoadReports();
+    }
+
+}

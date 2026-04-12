@@ -1,0 +1,75 @@
+@using HRMS.Core.Application.DTOs
+@using MudBlazor
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudTextField @bind-Value="@_education.Qualification" 
+                         Label="Qualification" 
+                         Variant="Variant.Outlined" 
+                         Required="true"
+                         RequiredError="Qualification is required" />
+            <MudTextField @bind-Value="@_education.Institution" 
+                         Label="Institution" 
+                         Variant="Variant.Outlined" 
+                         Required="true"
+                         RequiredError="Institution is required" />
+            <MudDatePicker @bind-Date="@_education.StartDate" 
+                          Label="Start Date" 
+                          Variant="Variant.Outlined" />
+            <MudDatePicker @bind-Date="@_education.EndDate" 
+                          Label="End Date" 
+                          Variant="Variant.Outlined" />
+            <MudNumericField @bind-Value="@_education.YearOfPassing" 
+                           Label="Year of Passing" 
+                           Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="@_education.GradeOrPercentage" 
+                         Label="Grade/Percentage" 
+                         Variant="Variant.Outlined" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!isValid)">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public EducationDetailDto? Education { get; set; }
+
+    private MudForm? form;
+    private bool isValid;
+    private EducationDetailDto _education = new();
+
+    protected override void OnInitialized()
+    {
+        if (Education != null)
+        {
+            _education = new EducationDetailDto
+            {
+                Id = Education.Id,
+                Qualification = Education.Qualification,
+                Institution = Education.Institution,
+                StartDate = Education.StartDate,
+                EndDate = Education.EndDate,
+                YearOfPassing = Education.YearOfPassing,
+                GradeOrPercentage = Education.GradeOrPercentage
+            };
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+
+    private void Save()
+    {
+        if (isValid)
+        {
+            MudDialog?.Close(DialogResult.Ok(_education));
+        }
+    }
+}

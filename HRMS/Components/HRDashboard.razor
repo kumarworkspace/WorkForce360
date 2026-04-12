@@ -1,0 +1,133 @@
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject NavigationManager Navigation
+
+<div>
+    <MudText Typo="Typo.h4" Class="mb-4" Style="font-weight: 600; color: #1a237e;">HR Dashboard</MudText>
+    
+    <MudGrid Spacing="3" Class="mb-4">
+        <!-- Employee Count Card -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
+                <MudText Typo="Typo.h6" Class="mb-2" Style="color: white;">Total Employees</MudText>
+                <MudText Typo="Typo.h3" Style="color: white; font-weight: bold;">@_totalEmployees</MudText>
+                <MudButton Variant="Variant.Outlined" 
+                          Color="Color.Inherit" 
+                          Class="mt-3"
+                          Style="border-color: white; color: white;"
+                          OnClick="NavigateToEmployees">
+                    View Employees
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Pending Approvals Card -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 8px; color: white;">
+                <MudText Typo="Typo.h6" Class="mb-2" Style="color: white;">Pending Approvals</MudText>
+                <MudText Typo="Typo.h3" Style="color: white; font-weight: bold;">@_pendingApprovalsCount</MudText>
+                <MudButton Variant="Variant.Outlined" 
+                          Color="Color.Inherit" 
+                          Class="mt-3"
+                          Style="border-color: white; color: white;"
+                          OnClick="NavigateToApprovals">
+                    Review Requests
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Upcoming Holidays Card -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 8px; color: white;">
+                <MudText Typo="Typo.h6" Class="mb-2" Style="color: white;">Upcoming Holidays</MudText>
+                <MudText Typo="Typo.h3" Style="color: white; font-weight: bold;">@_upcomingHolidaysCount</MudText>
+                <MudButton Variant="Variant.Outlined" 
+                          Color="Color.Inherit" 
+                          Class="mt-3"
+                          Style="border-color: white; color: white;"
+                          OnClick="NavigateToHolidays">
+                    Manage Holidays
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</div>
+
+@code {
+    [Parameter] public int TenantId { get; set; }
+    [Parameter] public IStaffService? StaffService { get; set; }
+    [Parameter] public ILeaveOtService? LeaveOtService { get; set; }
+    [Parameter] public IHolidayMasterService? HolidayMasterService { get; set; }
+
+    private int _totalEmployees = 0;
+    private int _pendingApprovalsCount = 0;
+    private int _upcomingHolidaysCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardDataAsync();
+    }
+
+    private async Task LoadDashboardDataAsync()
+    {
+        try
+        {
+            if (StaffService != null)
+            {
+                var staffResult = await StaffService.GetPagedAsync(TenantId, 1, 1, null, null, null);
+                _totalEmployees = staffResult.TotalCount;
+            }
+
+            if (LeaveOtService != null)
+            {
+                var pendingRequests = await LeaveOtService.GetPendingForHRAsync(TenantId);
+                _pendingApprovalsCount = pendingRequests.Count();
+            }
+
+            if (HolidayMasterService != null)
+            {
+                var holidays = await HolidayMasterService.GetByTenantIdAsync(TenantId);
+                var today = DateTime.Today;
+                _upcomingHolidaysCount = holidays.Count(h => h.HolidayDate >= today && h.IsActive);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't break the dashboard - initialize with default values
+            System.Diagnostics.Debug.WriteLine($"HRDashboard error: {ex.Message}");
+            _totalEmployees = 0;
+            _pendingApprovalsCount = 0;
+            _upcomingHolidaysCount = 0;
+        }
+    }
+
+    private void NavigateToEmployees()
+    {
+        Navigation.NavigateTo("/hrms/employees");
+    }
+
+    private void NavigateToApprovals()
+    {
+        Navigation.NavigateTo("/hrms/leave/approval");
+    }
+
+    private void NavigateToHolidays()
+    {
+        Navigation.NavigateTo("/hrms/leave/holidays");
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToUpper() switch
+        {
+            "PENDING" => Color.Warning,
+            "APPROVED" => Color.Success,
+            "REJECTED" => Color.Error,
+            "CANCELLED" => Color.Default,
+            _ => Color.Default
+        };
+    }
+}
+
+
+

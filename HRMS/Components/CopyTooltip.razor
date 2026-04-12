@@ -1,0 +1,73 @@
+﻿@using HRMS.Infrastructure.Services
+@inject IClipboardService ClipboardService
+<div class="tooltip-wrapper" style="position: relative; display: inline-block;"
+     @onmouseenter="ShowTooltip"
+     @onmouseleave="StartHideDelay">
+    @Child
+
+    @if (_showTooltip)
+    {
+        <div class="datagrid-tooltip">
+            <div class="d-flex align-center" style="pointer-events:auto;">
+                <MudText Typo="Typo.body2">@Text</MudText>
+                @if (EnableCopy)
+                {
+                    <MudIconButton Icon="@(_copied? Icons.Material.Filled.Check : Icons.Material.Filled.ContentCopy)"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   Class="ml-2"
+                                   OnClick="CopyText" />
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Text { get; set; }
+    [Parameter] public RenderFragment Child { get; set; }
+    [Parameter] public bool EnableCopy { get; set; }
+
+    private bool _showTooltip;
+    private bool _copied;
+    private CancellationTokenSource _cts;
+
+    private void ShowTooltip()
+    {
+        _showTooltip = true;
+        StateHasChanged();
+    }
+
+    private async void StartHideDelay()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            await Task.Delay(100, _cts.Token); // 500ms delay
+            _showTooltip = false;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException)
+        {
+            // Hide canceled because user hovered back
+        }
+    }
+
+    private void CancelHide()
+    {
+        _cts?.Cancel(); // Cancel any pending hide
+    }
+
+    private async Task CopyText()
+    {
+        await ClipboardService.CopyToClipboard(Text);
+        _copied = true;
+        StateHasChanged();
+
+        await Task.Delay(1200);
+        _copied = false;
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,188 @@
+<MudDrawer @bind-Open="_drawerOpen"
+           ClipMode="DrawerClipMode.Always"
+           Variant="DrawerVariant.Mini"
+           Breakpoint="@_variantBreakpoint"
+           Elevation="2"
+           Class="@DrawerCssClass"
+           @onmouseenter="@OnMouseEnter"
+           @onmouseleave="@OnMouseLeave">
+
+    <div class="menu-content-wrapper">
+        <MudDrawerHeader class="menu-header">
+            <div class="menu-header-content">
+                <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Large" Color="Color.Primary" />
+                @if (_drawerOpen)
+                {
+                    <MudText Typo="Typo.h6" Class="ml-2">WorkForce360</MudText>
+                }
+            </div>
+            @if (_drawerOpen)
+            {
+                <MudIconButton Icon="@(_isPinned ? Icons.Material.Filled.PushPin : Icons.Material.Filled.Menu)"
+                               Color="@(_isPinned ? Color.Primary : Color.Inherit)"
+                               OnClick="@TogglePin" />
+            }
+        </MudDrawerHeader>
+
+        <MudNavMenu>
+            <MudNavLink Href="/dashboard" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+
+            @foreach (var group in _visibleGroups)
+            {
+                <MudNavGroup Title="@group.Title" Icon="@group.GroupIcon" Expanded="false">
+                    @foreach (var item in group.Items)
+                    {
+                        <MudNavLink Href="@item.Href" Icon="@item.Icon">@item.Label</MudNavLink>
+                    }
+                </MudNavGroup>
+            }
+        </MudNavMenu>
+    </div>
+</MudDrawer>
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Domain.Interfaces
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IUnitOfWorkFactory UnitOfWorkFactory
+@inject ILogger<NavMenu> Logger
+
+@code {
+    private bool _drawerOpen = false;
+    private bool _isPinned = false;
+    private Breakpoint _variantBreakpoint = Breakpoint.None;
+
+    private List<NavGroup> _visibleGroups = new();
+
+    // Static nav definition — Permission must exactly match Permission.ModuleName in the database.
+    // Visibility is 100% driven by database permissions — no role names hardcoded here.
+    private static readonly List<NavGroup> AllGroups =
+    [
+        new NavGroup("WorkForce360", Icons.Material.Filled.People,
+        [
+            new NavItem("Employee Management", "/hrms/employees",      Icons.Material.Filled.Person,         "Employee Management"),
+            new NavItem("Staff Attendance",    "/hrms/attendance",     Icons.Material.Filled.HowToReg,       "Employee Management"),
+            new NavItem("My Leave",            "/hrms/leave",          Icons.Material.Filled.CalendarToday,  "Leave Management"),
+            new NavItem("Leave Approvals",     "/hrms/leave/approval", Icons.Material.Filled.CheckCircle,    "Leave Approval"),
+            new NavItem("Leave Configuration", "/hrms/leave/types",    Icons.Material.Filled.List,           "Leave Configuration"),
+            new NavItem("Holidays",            "/hrms/leave/holidays", Icons.Material.Filled.BeachAccess,    "Leave Configuration"),
+        ]),
+        new NavGroup("My Training", Icons.Material.Filled.School,
+        [
+            new NavItem("My Courses", "/tms/my-courses", Icons.Material.Filled.School, "My Training"),
+        ]),
+        new NavGroup("TMS", Icons.Material.Filled.CastForEducation,
+        [
+            new NavItem("TMS Dashboard",    "/tms/dashboard", Icons.Material.Filled.CastForEducation, "Course Management"),
+            new NavItem("Course Management","/tms/courses",   Icons.Material.Filled.Book,             "Course Management"),
+            new NavItem("Course Planning",  "/tms/planning",  Icons.Material.Filled.EventNote,        "Course Management"),
+            new NavItem("TMS Reports",      "/tms/reports",   Icons.Material.Filled.BarChart,         "Course Management"),
+        ]),
+        new NavGroup("Admin", Icons.Material.Filled.AdminPanelSettings,
+        [
+            new NavItem("User Management", "/admin/users",          Icons.Material.Filled.People,    "Role Management"),
+            new NavItem("Role Management", "/admin/roles",          Icons.Material.Filled.Assignment,"Role Management"),
+            new NavItem("Access Control",  "/admin/access-control", Icons.Material.Filled.Security,  "Access Control"),
+            new NavItem("Audit Logs",      "/admin/audit-logs",     Icons.Material.Filled.ListAlt,   "Audit Logs"),
+        ]),
+    ];
+
+    private bool _permissionsLoaded = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _permissionsLoaded) return;
+        _permissionsLoaded = true;
+
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated != true) return;
+
+            var userIdClaim   = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+
+            if (!int.TryParse(userIdClaim,   out var userId)  ||
+                !int.TryParse(tenantIdClaim, out var tenantId))
+            {
+                Logger.LogWarning("NavMenu: could not parse userId='{U}' or tenantId='{T}' from claims", userIdClaim, tenantIdClaim);
+                return;
+            }
+
+            // Use the factory so we get a fresh DbContext — avoids EF Core concurrency
+            // errors caused by page components and NavMenu using the same scoped instance.
+            Dictionary<string, int> permissions;
+            using (var uow = UnitOfWorkFactory.Create())
+            {
+                permissions = await LoadPermissionsAsync(uow, userId, tenantId);
+            }
+
+            // Build visible groups — solely driven by DB permissions, no role names in code
+            _visibleGroups = AllGroups
+                .Select(g => new NavGroup(
+                    g.Title,
+                    g.GroupIcon,
+                    g.Items.Where(item => permissions.GetValueOrDefault(item.Permission, 0) > 0).ToList()
+                ))
+                .Where(g => g.Items.Count > 0)
+                .ToList();
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "NavMenu: error loading permissions");
+            _visibleGroups = new();
+        }
+    }
+
+    private string DrawerCssClass => _drawerOpen ? "menu-drawer opened" : "menu-drawer collapsed";
+
+    private void TogglePin()
+    {
+        _isPinned = !_isPinned;
+        if (_isPinned)
+        {
+            _variantBreakpoint = Breakpoint.Always;
+            _drawerOpen = true;
+        }
+        else
+        {
+            _variantBreakpoint = Breakpoint.None;
+            _drawerOpen = false;
+        }
+    }
+
+    private void OnMouseEnter() { if (!_isPinned) _drawerOpen = true; }
+    private void OnMouseLeave() { if (!_isPinned) _drawerOpen = false; }
+
+    private static async Task<Dictionary<string, int>> LoadPermissionsAsync(IUnitOfWork uow, int userId, int tenantId)
+    {
+        var userRoles = await uow.UserRole.GetByUserIdAsync(userId, tenantId);
+        if (!userRoles.Any()) return new();
+
+        var permissions = await uow.Permission.GetByTenantIdAsync(tenantId);
+        var roleIds     = userRoles.Select(ur => ur.RoleId).ToList();
+        var result      = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var perm in permissions)
+        {
+            var rolePerms = await uow.RolePermission.GetByPermissionIdAsync(perm.PermissionId, tenantId);
+            var maxLevel  = rolePerms
+                .Where(rp => roleIds.Contains(rp.RoleId) && rp.IsActive)
+                .Select(rp => rp.AccessLevel)
+                .DefaultIfEmpty(0)
+                .Max();
+            result[perm.ModuleName] = maxLevel;
+        }
+
+        return result;
+    }
+
+    private record NavItem(string Label, string Href, string Icon, string Permission);
+
+    private record NavGroup(string Title, string GroupIcon, List<NavItem> Items);
+}

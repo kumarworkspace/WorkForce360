@@ -1,0 +1,535 @@
+@page "/tms/planning"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@using HRMS.Components
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICoursePlanningService CoursePlanningService
+@inject ICourseRegistrationService CourseService
+@inject IStaffService StaffService
+@inject IUserService UserService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ILogger<CoursePlanningList> Logger
+
+<PageTitle>Course Planning</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Course Planning</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Schedule and manage course training sessions</MudText>
+        </div>
+        @if (_accessLevel >= 2)
+        {
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      Size="Size.Medium"
+                      Style="box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                      OnClick="NavigateToCreate">
+                Schedule Course
+            </MudButton>
+        }
+    </div>
+
+    <!-- Search and Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3">
+                <MudSelect Value="@_selectedCourseId"
+                          ValueChanged="@OnCourseChangedCallback"
+                          Label="Course"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="int?">
+                    @foreach (var course in _courses)
+                    {
+                        <MudSelectItem Value="@((int?)course.CourseId)">@course.Title</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect Value="@_selectedTrainerId"
+                          ValueChanged="@OnTrainerChangedCallback"
+                          Label="Trainer"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="int?">
+                    @foreach (var trainer in _trainers)
+                    {
+                        <MudSelectItem Value="@((int?)trainer.StaffId)">@trainer.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudDatePicker Label="Start Date From"
+                              Date="_startDateFrom"
+                              Variant="Variant.Outlined"
+                              Clearable="true"
+                              DateChanged="@OnStartDateFromChanged" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudDatePicker Label="Start Date To"
+                              Date="_startDateTo"
+                              Variant="Variant.Outlined"
+                              Clearable="true"
+                              DateChanged="@OnStartDateToChanged" />
+            </MudItem>
+            <MudItem xs="12" md="1">
+                <MudSelect Value="@_selectedIsActive"
+                          ValueChanged="@OnStatusChangedCallback"
+                          Label="Status"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="bool?">
+                    <MudSelectItem Value="@((bool?)true)">Active</MudSelectItem>
+                    <MudSelectItem Value="@((bool?)false)">Inactive</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="1">
+                <MudButton Variant="Variant.Outlined"
+                          Color="Color.Secondary"
+                          StartIcon="@Icons.Material.Filled.Refresh"
+                          OnClick="ResetFilters"
+                          FullWidth="true"
+                          Style="height: 56px;">
+                    Reset
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Course Planning Table -->
+    <MudPaper Elevation="2" Style="border-radius: 8px; overflow: hidden;">
+        <MudTable Items="@_coursePlannings"
+                 Hover="true"
+                 Striped="true"
+                 Dense="true"
+                 Loading="@_isLoading"
+                 LoadingProgressColor="Color.Primary"
+                 Style="border-radius: 8px;">
+            <HeaderContent>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Course</MudTh>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Start Date/Time</MudTh>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">End Date/Time</MudTh>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Venue</MudTh>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Trainer</MudTh>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Duration (hrs)</MudTh>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600;">Status</MudTh>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600; text-align: center;">Completed</MudTh>
+                <MudTh Style="background-color: #1a237e; color: white; font-weight: 600; text-align: center;">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Course">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.CourseTitle</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.CourseCode</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Start Date/Time">
+                    <div>
+                        <MudText Typo="Typo.body2">@context.StartDate.ToString("dd MMM yyyy")</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.StartTime.ToString(@"hh\:mm")</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="End Date/Time">
+                    <div>
+                        <MudText Typo="Typo.body2">@context.EndDate.ToString("dd MMM yyyy")</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.EndTime.ToString(@"hh\:mm")</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Venue">
+                    <MudText Typo="Typo.body2">@context.Venue</MudText>
+                </MudTd>
+                <MudTd DataLabel="Trainer">
+                    <MudText Typo="Typo.body2">@context.TrainerName</MudText>
+                </MudTd>
+                <MudTd DataLabel="Duration">
+                    <MudText Typo="Typo.body2">@context.CourseDuration</MudText>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string"
+                            Size="Size.Small"
+                            Color="@(context.IsActive ? Color.Success : Color.Default)"
+                            Style="font-weight: 500;">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Completed" Style="text-align: center;">
+                    <MudSwitch T="bool"
+                              Value="@context.IsCompleted"
+                              ValueChanged="@((bool value) => OnCompletionStatusChanged(context.Id, value))"
+                              Color="Color.Success"
+                              Size="Size.Small" />
+                    @if (context.IsCompleted)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Style="font-weight: 500;">Completed</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Actions" Style="text-align: center;">
+                    <div class="d-flex gap-1 justify-center">
+                        <MudTooltip Text="View Details">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                          Size="Size.Small"
+                                          Color="Color.Primary"
+                                          OnClick="@(() => ViewDetails(context.Id))" />
+                        </MudTooltip>
+                        <MudTooltip Text="Add Participant">
+                            <MudIconButton Icon="@Icons.Material.Filled.Group"
+                                          Size="Size.Small"
+                                          Color="Color.Info"
+                                          Disabled="@context.IsCompleted"
+                                          OnClick="@(() => NavigateToParticipants(context.Id))" />
+                        </MudTooltip>
+                        @if (_accessLevel >= 2)
+                        {
+                            <MudTooltip Text="@(context.IsCompleted ? "Cannot edit completed course" : "Edit")">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                              Size="Size.Small"
+                                              Color="Color.Warning"
+                                              Disabled="@context.IsCompleted"
+                                              OnClick="@(() => NavigateToEdit(context.Id))" />
+                            </MudTooltip>
+                        }
+                        @if (_accessLevel >= 3)
+                        {
+                            <MudTooltip Text="@(context.IsCompleted ? "Cannot delete completed course" : "Delete")">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                              Size="Size.Small"
+                                              Color="Color.Error"
+                                              Disabled="@context.IsCompleted"
+                                              OnClick="@(() => DeleteCoursePlan(context.Id))" />
+                            </MudTooltip>
+                        }
+                    </div>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <div class="pa-8 text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.EventBusy" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">No course planning found</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Try adjusting your filters or create a new course plan</MudText>
+                </div>
+            </NoRecordsContent>
+        </MudTable>
+
+        <!-- Pagination -->
+        @if (_totalCount > 0)
+        {
+            <div class="d-flex justify-space-between align-center pa-4" style="border-top: 1px solid #e0e0e0;">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Showing @Math.Min((_currentPage - 1) * _pageSize + 1, _totalCount) - @Math.Min(_currentPage * _pageSize, _totalCount) of @_totalCount results
+                </MudText>
+                <MudPagination Count="@_totalPages"
+                              SelectedChanged="@OnPageChanged"
+                              Selected="@_currentPage"
+                              Color="Color.Primary"
+                              ShowFirstButton="true"
+                              ShowLastButton="true" />
+            </div>
+        }
+    </MudPaper>
+</MudContainer>
+
+<!-- Course Planning Details Slider (will be added later) -->
+
+@code {
+    private List<CoursePlanningListDto> _coursePlannings = new();
+    private List<CourseListDto> _courses = new();
+    private List<StaffListDto> _trainers = new();
+
+    private int? _selectedCourseId;
+    private int? _selectedTrainerId;
+    private DateTime? _startDateFrom;
+    private DateTime? _startDateTo;
+    private bool? _selectedIsActive = true;
+
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+    private int _totalCount = 0;
+    private int _totalPages = 0;
+    private bool _isLoading = false;
+
+    private int _tenantId;
+    private int _userId;
+    private int _accessLevel = 0;
+    private int? _createdBy;
+    private int? _staffId;
+    private string _userRole = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (!user.Identity?.IsAuthenticated ?? true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+            _userRole = roleClaim ?? string.Empty;
+
+            _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Course Management", _tenantId);
+
+            // Role-based filtering
+            if (roleClaim != "Super Admin")
+            {
+                _createdBy = _userId;
+
+                try
+                {
+                    var currentUser = await UserService.GetByIdAsync(_userId, _tenantId);
+                    if (currentUser != null && currentUser.StaffId.HasValue)
+                    {
+                        _staffId = currentUser.StaffId.Value;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger?.LogError(ex, "Error getting user StaffId for filtering");
+                }
+            }
+
+            await LoadDropdowns();
+            await LoadCoursePlanning();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error initializing Course Planning list");
+            Snackbar.Add("Error loading page. Please refresh.", Severity.Error);
+        }
+    }
+
+    private async Task LoadDropdowns()
+    {
+        try
+        {
+            // Load courses
+            var coursesResult = await CourseService.GetPagedAsync(
+                _tenantId, 1, 1000, null, null, null, true, null, _createdBy, _staffId);
+            _courses = coursesResult.Items.ToList();
+
+            // Load trainers
+            var trainersResult = await StaffService.GetPagedAsync(_tenantId, 1, 1000, null, null, null);
+            _trainers = trainersResult.Items.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error loading dropdowns");
+        }
+    }
+
+    private async Task LoadCoursePlanning()
+    {
+        try
+        {
+            _isLoading = true;
+            StateHasChanged();
+
+            var result = await CoursePlanningService.GetPagedAsync(
+                _tenantId,
+                _currentPage,
+                _pageSize,
+                _selectedTrainerId,
+                _selectedCourseId,
+                _selectedIsActive,
+                _createdBy,
+                _staffId);
+
+            // Apply date filtering on client side
+            var filteredItems = result.Items.AsEnumerable();
+
+            if (_startDateFrom.HasValue)
+            {
+                filteredItems = filteredItems.Where(cp => cp.StartDate >= _startDateFrom.Value);
+            }
+
+            if (_startDateTo.HasValue)
+            {
+                filteredItems = filteredItems.Where(cp => cp.StartDate <= _startDateTo.Value);
+            }
+
+            _coursePlannings = filteredItems.ToList();
+            _totalCount = _coursePlannings.Count;
+            _totalPages = (int)Math.Ceiling(_totalCount / (double)_pageSize);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error loading course planning");
+            Snackbar.Add("Error loading course planning. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnCourseChangedCallback(int? courseId)
+    {
+        _selectedCourseId = courseId;
+        _currentPage = 1;
+        await LoadCoursePlanning();
+    }
+
+    private async Task OnTrainerChangedCallback(int? trainerId)
+    {
+        _selectedTrainerId = trainerId;
+        _currentPage = 1;
+        await LoadCoursePlanning();
+    }
+
+    private async Task OnStatusChangedCallback(bool? isActive)
+    {
+        _selectedIsActive = isActive;
+        _currentPage = 1;
+        await LoadCoursePlanning();
+    }
+
+    private async Task OnStartDateFromChanged(DateTime? date)
+    {
+        _startDateFrom = date;
+        _currentPage = 1;
+        await LoadCoursePlanning();
+    }
+
+    private async Task OnStartDateToChanged(DateTime? date)
+    {
+        _startDateTo = date;
+        _currentPage = 1;
+        await LoadCoursePlanning();
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _currentPage = page;
+        await LoadCoursePlanning();
+    }
+
+    private async Task ResetFilters()
+    {
+        _selectedCourseId = null;
+        _selectedTrainerId = null;
+        _startDateFrom = null;
+        _startDateTo = null;
+        _selectedIsActive = true;
+        _currentPage = 1;
+        await LoadCoursePlanning();
+    }
+
+    private void NavigateToCreate()
+    {
+        Navigation.NavigateTo("/tms/planning/create");
+    }
+
+    private void NavigateToEdit(int id)
+    {
+        Navigation.NavigateTo($"/tms/planning/edit/{id}");
+    }
+
+    private void ViewDetails(int id)
+    {
+        Navigation.NavigateTo($"/tms/planning/view/{id}");
+    }
+
+    private void NavigateToParticipants(int id)
+    {
+        Navigation.NavigateTo($"/tms/planning/{id}/participants");
+    }
+
+    private async Task DeleteCoursePlan(int id)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Delete",
+            "Are you sure you want to delete this course plan? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                var ipAddress = Navigation.Uri;
+                var success = await CoursePlanningService.DeleteAsync(id, _tenantId, _userId, ipAddress);
+
+                if (success)
+                {
+                    Snackbar.Add("Course plan deleted successfully", Severity.Success);
+                    await LoadCoursePlanning();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to delete course plan", Severity.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError(ex, "Error deleting course plan");
+                Snackbar.Add("Error deleting course plan. Please try again.", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OnCompletionStatusChanged(int id, bool isCompleted)
+    {
+        try
+        {
+            if (isCompleted)
+            {
+                var confirmed = await DialogService.ShowMessageBox(
+                    "Mark as Completed",
+                    "Are you sure you want to mark this course as completed? Once completed, the course cannot be edited.",
+                    yesText: "Complete",
+                    cancelText: "Cancel");
+
+                if (confirmed != true)
+                {
+                    return;
+                }
+            }
+
+            var success = await CoursePlanningService.UpdateCompletionStatusAsync(id, _tenantId, isCompleted, _userId);
+
+            if (success)
+            {
+                Snackbar.Add(isCompleted ? "Course marked as completed" : "Course completion status updated", Severity.Success);
+                await LoadCoursePlanning();
+            }
+            else
+            {
+                Snackbar.Add("Failed to update completion status", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error updating completion status");
+            Snackbar.Add("Error updating completion status. Please try again.", Severity.Error);
+        }
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+}

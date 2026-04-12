@@ -1,0 +1,116 @@
+@page "/dashboard"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IStaffService StaffService
+@inject ILeaveOtService LeaveOtService
+@inject ILeaveTypeMasterService LeaveTypeMasterService
+@inject IHolidayMasterService HolidayMasterService
+@inject NavigationManager Navigation
+@inject IUserService UserService
+@inject ISnackbar Snackbar
+@inject ILogger<Dashboard> Logger
+
+<PageTitle>Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        @if (_userRole == "Staff")
+        {
+            <StaffDashboard 
+                TenantId="@_tenantId"
+                StaffId="@_staffId"
+                LeaveOtService="@LeaveOtService"
+                HolidayMasterService="@HolidayMasterService" />
+        }
+        else if (_userRole == "HR Admin" || _userRole == "Super Admin")
+        {
+            <HRDashboard 
+                TenantId="@_tenantId"
+                StaffService="@StaffService"
+                LeaveOtService="@LeaveOtService"
+                HolidayMasterService="@HolidayMasterService" />
+        }
+        else
+        {
+            <MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-2">Welcome to HRMS & TMS</MudText>
+                <MudText Typo="Typo.body1">Your tenant-specific dashboard will be displayed here.</MudText>
+            </MudPaper>
+        }
+    }
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private int _tenantId;
+    private int _userId;
+    private int? _staffId;
+    private string _userRole = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+            _userRole = roleClaim ?? string.Empty;
+
+            // Get user's staff ID
+            try
+            {
+                var userEntity = await UserService.GetByIdAsync(_userId, _tenantId);
+                if (userEntity != null && userEntity.StaffId.HasValue)
+                {
+                    _staffId = userEntity.StaffId.Value;
+                }
+            }
+            catch (Exception dbEx)
+            {
+                Logger.LogWarning(dbEx, "Could not load user entity for UserId: {UserId}. This may be normal if the user doesn't have a staff record yet.", _userId);
+                // Continue without staff ID - dashboard will still work for HR/Admin users
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Dashboard. Exception: {ExceptionMessage}, InnerException: {InnerException}, StackTrace: {StackTrace}", 
+                ex.Message, ex.InnerException?.Message, ex.StackTrace);
+            var errorMessage = ex.InnerException != null 
+                ? $"Error loading dashboard: {ex.InnerException.Message}" 
+                : $"Error loading dashboard: {ex.Message}";
+            Snackbar.Add(errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

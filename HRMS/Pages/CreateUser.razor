@@ -1,0 +1,361 @@
+@page "/admin/create-user"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IUserService UserService
+@inject IStaffService StaffService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+@implements IDisposable
+
+<PageTitle>Create User</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Create User Account</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Create user accounts for staff members</MudText>
+        </div>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="NavigateBack">
+            Back
+        </MudButton>
+    </div>
+
+    <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudGrid Spacing="3">
+                <!-- Staff Selection -->
+                <MudItem xs="12">
+                    <MudAutocomplete T="StaffListDto"
+                                   Value="@selectedStaff"
+                                   ValueChanged="OnStaffSelected"
+                                   SearchFunc="@SearchStaff"
+                                   Label="Select Staff *"
+                                   Variant="Variant.Outlined"
+                                   ToStringFunc="@(staff => staff != null ? $"{staff.Name} ({staff.Email}) - {staff.Department}" : string.Empty)"
+                                   ResetValueOnEmptyText="true"
+                                   Required="true"
+                                   RequiredError="Please select a staff member">
+                        <ItemTemplate>
+                            <div style="padding: 8px;">
+                                <MudText Typo="Typo.body1" Style="font-weight: 500;">@context.Name</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">@context.Email - @context.Department</MudText>
+                            </div>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                </MudItem>
+
+                @if (selectedStaff != null)
+                {
+                        <!-- Email -->
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="@email"
+                                        Label="Email *"
+                                        Variant="Variant.Outlined"
+                                        Required="true"
+                                        RequiredError="Email is required"
+                                        HelperText="Email will be used for login"
+                                        InputType="InputType.Email" />
+                        </MudItem>
+
+                        <!-- Role Selection -->
+                        <MudItem xs="12">
+                            <MudSelect @bind-Value="@selectedRole"
+                                      Label="Role *"
+                                      Variant="Variant.Outlined"
+                                      T="string"
+                                      Required="true"
+                                      RequiredError="Please select a role">
+                                <MudSelectItem Value="@("Super Admin")">Super Admin</MudSelectItem>
+                                <MudSelectItem Value="@("HR Admin")">HR Admin</MudSelectItem>
+                                <MudSelectItem Value="@("Manager")">Manager</MudSelectItem>
+                                <MudSelectItem Value="@("Trainer")">Trainer</MudSelectItem>
+                                <MudSelectItem Value="@("Staff")">Staff</MudSelectItem>
+                                <MudSelectItem Value="@("IT Admin")">IT Admin</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+
+                        <!-- Password Options -->
+                        <MudItem xs="12">
+                            <MudSwitch T="bool" @bind-Checked="@autoGeneratePassword" 
+                                      Label="Auto-generate password"
+                                      Color="Color.Primary" />
+                        </MudItem>
+
+                        @if (!autoGeneratePassword)
+                        {
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="@password"
+                                            Label="Password *"
+                                            Variant="Variant.Outlined"
+                                            InputType="@passwordInputType"
+                                            Required="true"
+                                            RequiredError="Password is required"
+                                            HelperText="Minimum 8 characters, must contain uppercase, lowercase, number, and special character"
+                                            Adornment="Adornment.End"
+                                            AdornmentIcon="@passwordIcon"
+                                            OnAdornmentClick="TogglePasswordVisibility">
+                                    <HelperText>
+                                        <MudText Typo="Typo.caption">Password must be at least 8 characters and contain uppercase, lowercase, number, and special character</MudText>
+                                    </HelperText>
+                                </MudTextField>
+                            </MudItem>
+                        }
+                        else
+                        {
+                            <MudItem xs="12">
+                                <MudAlert Severity="Severity.Info">
+                                    A random password will be generated and displayed after user creation.
+                                </MudAlert>
+                            </MudItem>
+                        }
+
+                        <!-- Staff Info Display -->
+                        <MudItem xs="12">
+                            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #f5f5f5; border-radius: 4px;">
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">Staff Information:</MudText>
+                                <MudText Typo="Typo.body2">Name: <strong>@selectedStaff.Name</strong></MudText>
+                                <MudText Typo="Typo.body2">Email: <strong>@selectedStaff.Email</strong></MudText>
+                                <MudText Typo="Typo.body2">Department: <strong>@selectedStaff.Department</strong></MudText>
+                                <MudText Typo="Typo.body2">Position: <strong>@selectedStaff.Position</strong></MudText>
+                            </MudPaper>
+                        </MudItem>
+                }
+
+                <!-- Action Buttons -->
+                <MudItem xs="12">
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="NavigateBack">
+                            Cancel
+                        </MudButton>
+                        <MudButton Variant="Variant.Filled" 
+                                 Color="Color.Primary" 
+                                 OnClick="CreateUserAccount"
+                                 Disabled="@(isCreating || !isValid)">
+                            @if (isCreating)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Create User
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? form;
+    private bool isValid = false;
+    private bool isCreating = false;
+    private StaffListDto? selectedStaff;
+    private int? selectedStaffId;
+    private string email = string.Empty;
+    private string selectedRole = string.Empty;
+    private string password = string.Empty;
+    private bool autoGeneratePassword = false;
+    private InputType passwordInputType = InputType.Password;
+    private string passwordIcon = Icons.Material.Filled.VisibilityOff;
+
+    private List<StaffListDto> _staffList = new();
+    private int _tenantId = 0;
+    private int _userId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst("UserId")?.Value;
+
+            if (int.TryParse(tenantIdClaim, out var tid))
+                _tenantId = tid;
+            if (int.TryParse(userIdClaim, out var uid))
+                _userId = uid;
+
+            await LoadAllStaff();
+        }
+    }
+
+    private async Task LoadAllStaff()
+    {
+        try
+        {
+            // Load ALL staff for the tenant (not just those without accounts)
+            var pagedResult = await StaffService.GetPagedAsync(_tenantId, 1, 10000, null, null, null);
+            _staffList = pagedResult.Items
+                .Where(s => s.IsActive && !string.IsNullOrEmpty(s.Email))
+                .OrderBy(s => s.Name)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            Snackbar.Add($"Error loading staff: {errorMessage}", Severity.Error);
+            _staffList = new List<StaffListDto>();
+        }
+    }
+
+    private async Task<IEnumerable<StaffListDto>> SearchStaff(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return _staffList.Take(50);
+        }
+        
+        var searchLower = value.ToLower();
+        return _staffList.Where(s => 
+            (s.Name?.ToLower().Contains(searchLower) ?? false) ||
+            (s.Email?.ToLower().Contains(searchLower) ?? false) ||
+            (s.Department?.ToLower().Contains(searchLower) ?? false)
+        ).Take(50);
+    }
+
+    private void OnStaffSelected(StaffListDto? staff)
+    {
+        selectedStaff = staff;
+        selectedStaffId = staff?.StaffId;
+        
+        if (staff != null)
+        {
+            // Auto-fill email from staff record
+            if (!string.IsNullOrEmpty(staff.Email))
+            {
+                email = staff.Email;
+            }
+            StateHasChanged(); // Refresh UI to show auto-filled email
+        }
+        else
+        {
+            email = string.Empty; // Clear email if no staff selected
+        }
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        if (passwordInputType == InputType.Password)
+        {
+            passwordInputType = InputType.Text;
+            passwordIcon = Icons.Material.Filled.Visibility;
+        }
+        else
+        {
+            passwordInputType = InputType.Password;
+            passwordIcon = Icons.Material.Filled.VisibilityOff;
+        }
+    }
+
+    private async Task CreateUserAccount()
+    {
+        if (selectedStaff == null || !selectedStaffId.HasValue || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(selectedRole))
+        {
+            Snackbar.Add("Please fill in all required fields.", Severity.Warning);
+            return;
+        }
+
+        if (!autoGeneratePassword && string.IsNullOrEmpty(password))
+        {
+            Snackbar.Add("Please enter a password or enable auto-generation.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            isCreating = true;
+
+            var request = new CreateUserRequest
+            {
+                StaffId = selectedStaffId.Value,
+                Email = email,
+                Role = selectedRole,
+                Password = password,
+                AutoGeneratePassword = autoGeneratePassword
+            };
+
+            // Get IP address for audit logging
+            var ipAddress = GetClientIpAddress();
+
+            var result = await UserService.CreateUserAsync(request, _tenantId, _userId, ipAddress);
+
+            if (result.Success)
+            {
+                Snackbar.Add(result.Message, Severity.Success);
+                
+                // Reset form
+                selectedStaff = null;
+                selectedStaffId = null;
+                email = string.Empty;
+                selectedRole = string.Empty;
+                password = string.Empty;
+                autoGeneratePassword = false;
+                form?.ResetValidation();
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add(result.Message, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            Snackbar.Add($"Error creating user: {errorMessage}", Severity.Error);
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/admin/users");
+    }
+
+    private string? GetClientIpAddress()
+    {
+        try
+        {
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext == null) return null;
+
+            // Check for forwarded IP (if behind proxy/load balancer)
+            var forwardedFor = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(forwardedFor))
+            {
+                var ips = forwardedFor.Split(',');
+                if (ips.Length > 0)
+                {
+                    return ips[0].Trim();
+                }
+            }
+
+            // Check for real IP
+            var realIp = httpContext.Request.Headers["X-Real-IP"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(realIp))
+            {
+                return realIp;
+            }
+
+            // Fallback to connection remote IP
+            return httpContext.Connection.RemoteIpAddress?.ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public void Dispose()
+    {
+    }
+}
+

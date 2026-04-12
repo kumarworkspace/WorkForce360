@@ -1,0 +1,216 @@
+@page "/hrms/leave/types"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILeaveTypeMasterService LeaveTypeMasterService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<LeaveTypeMaster> Logger
+@inject IDialogService DialogService
+
+<PageTitle>Leave Type Master</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Leave Type Master</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage leave types and their configurations</MudText>
+        </div>
+        @if (_accessLevel >= 2)
+        {
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      Size="Size.Medium"
+                      OnClick="OpenCreateDialog">
+                Add Leave Type
+            </MudButton>
+        }
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!_leaveTypes.Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">No leave types found. Create your first leave type.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_leaveTypes" Dense="true" Hover="true" Bordered="false" Striped="true" Class="mt-4" Elevation="2">
+            <HeaderContent>
+                <MudTh>Leave Type Name</MudTh>
+                <MudTh>Max Days Per Year</MudTh>
+                <MudTh>Is Paid</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Leave Type Name">@context.LeaveTypeName</MudTd>
+                <MudTd DataLabel="Max Days Per Year">@context.MaxDaysPerYear.ToString("F2")</MudTd>
+                <MudTd DataLabel="Is Paid">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.IsPaid ? Color.Success : Color.Default)">
+                        @(context.IsPaid ? "Yes" : "No")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    @if (_accessLevel >= 2)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                     Color="Color.Primary"
+                                     Size="Size.Small"
+                                     Title="Edit"
+                                     OnClick="@(() => OpenEditDialog(context))" />
+                    }
+                    @if (_accessLevel >= 3)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                     Color="Color.Error"
+                                     Size="Size.Small"
+                                     Title="Delete"
+                                     OnClick="@(() => DeleteLeaveType(context))" />
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private int _tenantId;
+    private int _userId;
+    private int _accessLevel = 0;
+    private List<LeaveTypeMasterDto> _leaveTypes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                Navigation.NavigateTo("/dashboard");
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+
+            _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Leave Configuration", _tenantId);
+
+            await LoadLeaveTypesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing Leave Type Master page");
+            Snackbar.Add("Error loading page. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadLeaveTypesAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            var leaveTypes = await LeaveTypeMasterService.GetByTenantIdAsync(_tenantId);
+            _leaveTypes = leaveTypes.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading leave types");
+            Snackbar.Add($"Error loading leave types: {ex.Message}", Severity.Error);
+            _leaveTypes = new List<LeaveTypeMasterDto>();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters 
+        { 
+            ["LeaveType"] = (LeaveTypeMasterDto?)null,
+            ["TenantId"] = _tenantId,
+            ["UserId"] = _userId
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<LeaveTypeDialog>("Add Leave Type", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is LeaveTypeMasterDto)
+        {
+            await LoadLeaveTypesAsync();
+        }
+    }
+
+    private async Task OpenEditDialog(LeaveTypeMasterDto leaveType)
+    {
+        var parameters = new DialogParameters 
+        { 
+            ["LeaveType"] = leaveType,
+            ["TenantId"] = _tenantId,
+            ["UserId"] = _userId
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<LeaveTypeDialog>("Edit Leave Type", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is LeaveTypeMasterDto)
+        {
+            await LoadLeaveTypesAsync();
+        }
+    }
+
+    private async Task DeleteLeaveType(LeaveTypeMasterDto leaveType)
+    {
+        var parameters = new DialogParameters { ["Message"] = $"Are you sure you want to delete leave type '{leaveType.LeaveTypeName}'?" };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                await LeaveTypeMasterService.DeleteAsync(leaveType.LeaveTypeId, _tenantId, _userId);
+                Snackbar.Add("Leave type deleted successfully", Severity.Success);
+                await LoadLeaveTypesAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting leave type");
+                Snackbar.Add($"Error deleting leave type: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}
+

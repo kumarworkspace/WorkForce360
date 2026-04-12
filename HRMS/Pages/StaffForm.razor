@@ -1,0 +1,1319 @@
+@page "/hrms/employees/form"
+@page "/hrms/employees/form/{StaffId:int}"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@using System.IO
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IStaffService StaffService
+@inject IMasterDropdownService MasterDropdownService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<StaffForm> Logger
+@inject IJSRuntime JSRuntime
+
+<PageTitle>@(IsEditMode ? "Edit Employee" : "Add Employee")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <MudText Typo="Typo.h4">@(IsEditMode ? "Edit Employee" : "Add Employee")</MudText>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="NavigateBack">
+            Back to List
+        </MudButton>
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudForm @ref="form" @bind-IsValid="@isValid">
+            <MudPaper Elevation="2" Class="pa-4">
+                <!-- Header Section with Name, Employee Code (Left) and Photo (Right) -->
+                <MudGrid Class="mb-4">
+                    <MudItem xs="12" md="8">
+                        <div class="d-flex flex-column" style="gap: 16px;">
+                            <MudTextField @bind-Value="@_request.Name"
+                                         Label="Full Name *"
+                                         Variant="Variant.Outlined"
+                                         Required="true"
+                                         RequiredError="Name is required"
+                                         FullWidth="@true"
+                                         Style="font-size: 1.1rem;" />
+                            <MudTextField @bind-Value="@_request.EmployeeCode"
+                                         Label="Employee Code"
+                                         Variant="Variant.Outlined"
+                                         FullWidth="@true"
+                                         Disabled="@true"
+                                         HelperText="Auto-generated based on tenant"
+                                         Style="background-color: #f5f5f5;" />
+                        </div>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <div class="d-flex flex-column align-center" style="gap: 12px;">
+                            <div style="width: 180px; height: 220px; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                                @if (!string.IsNullOrEmpty(_photoPreviewUrl))
+                                {
+                                    <img src="@_photoPreviewUrl" 
+                                         alt="Employee Photo" 
+                                         style="width: 100%; height: 100%; object-fit: cover;" />
+                                }
+                                else if (!string.IsNullOrEmpty(_existingPhotoUrl))
+                                {
+                                    <img src="@_existingPhotoUrl" 
+                                         alt="Employee Photo" 
+                                         style="width: 100%; height: 100%; object-fit: cover;" />
+                                }
+                                else
+                                {
+                                    <div style="width: 100%; height: 100%; border: 2px dashed #e0e0e0; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Default" Style="opacity: 0.5;" />
+                                    </div>
+                                }
+                            </div>
+                            <InputFile id="photoInput" @ref="_photoInputRef" OnChange="HandlePhotoSelected" 
+                                      accept=".jpg,.jpeg,.png,.gif"
+                                      class="d-none" />
+                            <MudButton Variant="Variant.Outlined"
+                                      StartIcon="@Icons.Material.Filled.PhotoCamera"
+                                      Disabled="@_isUploadingPhoto"
+                                      OnClick="TriggerPhotoInput"
+                                      Size="Size.Small"
+                                      FullWidth="true"
+                                      Style="max-width: 180px;">
+                                @if (_isUploadingPhoto)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Uploading...</span>
+                                }
+                                else
+                                {
+                                    <span>@(string.IsNullOrEmpty(_photoPreviewUrl) && string.IsNullOrEmpty(_existingPhotoUrl) ? "Upload Photo" : "Change Photo")</span>
+                                }
+                            </MudButton>
+                            @if (!string.IsNullOrEmpty(_photoFileName))
+                            {
+                                <MudText Typo="Typo.caption" Class="text-center" Style="max-width: 180px; word-break: break-word;">@_photoFileName</MudText>
+                            }
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-center" Style="max-width: 180px;">
+                                Supported: JPG, PNG, GIF<br />(Max 5MB)
+                            </MudText>
+                        </div>
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Personal Information Section - 2 Column Layout -->
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1976d2; font-weight: 600;">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-2" />
+                    Personal Information
+                </MudText>
+                <MudGrid Class="mt-2">
+                    <!-- Left Column -->
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="1" Class="pa-3" Style="height: 100%;">
+                            <MudGrid>
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="@_request.Company"
+                                                 Label="Company"
+                                                 Variant="Variant.Outlined"
+                                                 FullWidth="@true" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudDatePicker @bind-Date="@_request.DateOfBirth"
+                                                  Label="Date of Birth"
+                                                  Variant="Variant.Outlined"
+                                                  FullWidth="@true" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudSelect T="int?" @bind-Value="@_request.GenderId"
+                                              Label="Gender"
+                                              Variant="Variant.Outlined"
+                                              FullWidth="@true">
+                                        @foreach (var gender in _genders)
+                                        {
+                                            <MudSelectItem T="int?" Value="@((int?)gender.Id)">@gender.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="@_request.Email"
+                                                 Label="Email *"
+                                                 Variant="Variant.Outlined"
+                                                 InputType="InputType.Email"
+                                                 Required="true"
+                                                 RequiredError="Email is required"
+                                                 FullWidth="@true" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="@_request.PhoneNumber"
+                                                 Label="Phone Number"
+                                                 Variant="Variant.Outlined"
+                                                 FullWidth="@true" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="@_request.IdentityCard"
+                                                 Label="Identity Card / Passport"
+                                                 Variant="Variant.Outlined"
+                                                 FullWidth="@true" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="@_request.Address"
+                                                 Label="Address"
+                                                 Variant="Variant.Outlined"
+                                                 Lines="3"
+                                                 FullWidth="@true" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudCard>
+                    </MudItem>
+                    
+                    <!-- Right Column -->
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="1" Class="pa-3" Style="height: 100%;">
+                            <MudGrid>
+                                <MudItem xs="12">
+                                    <MudSelect @bind-Value="@_request.Division"
+                                              Label="Division *"
+                                              Variant="Variant.Outlined"
+                                              Required="true"
+                                              FullWidth="@true">
+                                        @foreach (var division in _divisions)
+                                        {
+                                            <MudSelectItem Value="@division.Name">@division.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudSelect @bind-Value="@_request.Department"
+                                              Label="Department *"
+                                              Variant="Variant.Outlined"
+                                              Required="true"
+                                              FullWidth="@true">
+                                        @foreach (var dept in _departments)
+                                        {
+                                            <MudSelectItem Value="@dept.Name">@dept.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudSelect @bind-Value="@_request.Position"
+                                              Label="Position *"
+                                              Variant="Variant.Outlined"
+                                              Required="true"
+                                              FullWidth="@true">
+                                        @foreach (var position in _positions)
+                                        {
+                                            <MudSelectItem Value="@position.Name">@position.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudSelect T="int?" @bind-Value="@_request.EmploymentStatusId"
+                                              Label="Employment Status"
+                                              Variant="Variant.Outlined"
+                                              FullWidth="@true">
+                                        @foreach (var status in _employmentStatuses)
+                                        {
+                                            <MudSelectItem T="int?" Value="@((int?)status.Id)">@status.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudDatePicker @bind-Date="@_request.DateJoined"
+                                                  Label="Date Joined"
+                                                  Variant="Variant.Outlined"
+                                                  FullWidth="@true" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudDatePicker @bind-Date="@_request.RetirementDate"
+                                                  Label="Retirement Date"
+                                                  Variant="Variant.Outlined"
+                                                  FullWidth="@true" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudSelect T="int?" @bind-Value="@_request.ReportingManagerId"
+                                              Label="Reporting Manager"
+                                              Variant="Variant.Outlined"
+                                              FullWidth="@true"
+                                              Clearable="true">
+                                        @foreach (var manager in _reportingManagers)
+                                        {
+                                            <MudSelectItem T="int?" Value="@((int?)manager.StaffId)">@manager.Name (@manager.EmployeeCode)</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                            </MudGrid>
+                        </MudCard>
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Education Details Section -->
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1976d2; font-weight: 600;">
+                    <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Small" Class="mr-2" />
+                    Education Details
+                </MudText>
+                <MudGrid Class="mt-2">
+                            <MudItem xs="12" class="d-flex justify-end">
+                                <MudButton Variant="Variant.Outlined" 
+                                          StartIcon="@Icons.Material.Filled.Add" 
+                                          OnClick="AddEducationDetail">
+                                    Add Education
+                                </MudButton>
+                            </MudItem>
+                            <MudItem xs="12">
+                                @if (_request.EducationDetails.Any())
+                                {
+                                    <MudTable Items="@_request.EducationDetails" Hover="true" Dense="true">
+                                        <HeaderContent>
+                                            <MudTh>Start Date</MudTh>
+                                            <MudTh>End Date</MudTh>
+                                            <MudTh>Institution</MudTh>
+                                            <MudTh>Qualification</MudTh>
+                                            <MudTh>Year of Passing</MudTh>
+                                            <MudTh>Grade/Percentage</MudTh>
+                                            <MudTh>Action</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd DataLabel="Start Date">
+                                                <MudDatePicker @bind-Date="@context.StartDate" 
+                                                              Variant="Variant.Outlined" 
+                                                              Dense="true"
+                                                              FullWidth="@true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="End Date">
+                                                <MudDatePicker @bind-Date="@context.EndDate" 
+                                                              Variant="Variant.Outlined" 
+                                                              Dense="true"
+                                                              FullWidth="@true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Institution">
+                                                <MudTextField @bind-Value="@context.Institution" 
+                                                             Variant="Variant.Outlined" 
+                                                             Dense="true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Qualification">
+                                                <MudTextField @bind-Value="@context.Qualification" 
+                                                             Variant="Variant.Outlined" 
+                                                             Dense="true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Year of Passing">
+                                                <MudNumericField @bind-Value="@context.YearOfPassing" 
+                                                                Variant="Variant.Outlined" 
+                                                                Dense="true"
+                                                                Min="1900"
+                                                                Max="@DateTime.Now.Year"
+                                                                FullWidth="@true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Grade/Percentage">
+                                                <MudTextField @bind-Value="@context.GradeOrPercentage" 
+                                                             Variant="Variant.Outlined" 
+                                                             Dense="true"
+                                                             Placeholder="e.g., A+, 85%" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Action">
+                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                              Color="Color.Error" 
+                                                              Size="Size.Small"
+                                                              OnClick="@(() => RemoveEducationDetail(context))" />
+                                            </MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Default">No education details added.</MudText>
+                                }
+                            </MudItem>
+                        </MudGrid>
+
+                <!-- Experience Details Section -->
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1976d2; font-weight: 600;">
+                    <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />
+                    Experience Details
+                </MudText>
+                <MudGrid Class="mt-2">
+                            <MudItem xs="12" class="d-flex justify-end">
+                                <MudButton Variant="Variant.Outlined" 
+                                          StartIcon="@Icons.Material.Filled.Add" 
+                                          OnClick="AddExperienceDetail">
+                                    Add Experience
+                                </MudButton>
+                            </MudItem>
+                            <MudItem xs="12">
+                                @if (_request.ExperienceDetails.Any())
+                                {
+                                    <MudTable Items="@_request.ExperienceDetails" Hover="true" Dense="true">
+                                        <HeaderContent>
+                                            <MudTh>Start Date</MudTh>
+                                            <MudTh>End Date</MudTh>
+                                            <MudTh>Company</MudTh>
+                                            <MudTh>Position</MudTh>
+                                            <MudTh>Total Experience</MudTh>
+                                            <MudTh>Action</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd DataLabel="Start Date">
+                                                <MudDatePicker Date="@context.StartDate" 
+                                                              DateChanged="@((DateTime? date) => { context.StartDate = date; CalculateTotalExperience(context); })"
+                                                              Variant="Variant.Outlined" 
+                                                              Dense="true"
+                                                              FullWidth="@true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="End Date">
+                                                <MudDatePicker Date="@context.EndDate" 
+                                                              DateChanged="@((DateTime? date) => { context.EndDate = date; CalculateTotalExperience(context); })"
+                                                              Variant="Variant.Outlined" 
+                                                              Dense="true"
+                                                              FullWidth="@true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Company">
+                                                <MudTextField @bind-Value="@context.Company" 
+                                                             Variant="Variant.Outlined" 
+                                                             Dense="true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Position">
+                                                <MudTextField @bind-Value="@context.Position" 
+                                                             Variant="Variant.Outlined" 
+                                                             Dense="true" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Total Experience">
+                                                <MudTextField @bind-Value="@context.TotalExperience" 
+                                                             Variant="Variant.Outlined" 
+                                                             Dense="true"
+                                                             ReadOnly="true"
+                                                             Placeholder="Auto-calculated" />
+                                            </MudTd>
+                                            <MudTd DataLabel="Action">
+                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                              Color="Color.Error" 
+                                                              Size="Size.Small"
+                                                              OnClick="@(() => RemoveExperienceDetail(context))" />
+                                            </MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Default">No experience details added.</MudText>
+                                }
+                            </MudItem>
+                        </MudGrid>
+
+                <!-- Documents Section -->
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1976d2; font-weight: 600;">
+                    <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Class="mr-2" />
+                    Documents
+                </MudText>
+                <MudGrid Class="mt-2">
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.subtitle1" Class="mb-3">Upload Legal Documents</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                                    Supported formats: PDF, DOC, DOCX, JPG, JPEG, PNG (Max 5MB)
+                                </MudText>
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudSelect @bind-Value="@_selectedDocumentType"
+                                          Label="Document Type *"
+                                          Variant="Variant.Outlined"
+                                          FullWidth="@true">
+                                    @foreach (var docType in _documentTypes)
+                                    {
+                                        <MudSelectItem Value="@docType.Name">@docType.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <InputFile id="fileInput" @ref="_fileInputRef" OnChange="HandleFileSelected" 
+                                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                          class="d-none" />
+                                <MudButton Variant="Variant.Outlined"
+                                          StartIcon="@Icons.Material.Filled.UploadFile"
+                                          Disabled="@(string.IsNullOrEmpty(_selectedDocumentType) || _isUploadingDocument)"
+                                          OnClick="TriggerFileInput">
+                                    @if (_isUploadingDocument)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        <span>Uploading...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Choose File</span>
+                                    }
+                                </MudButton>
+                                @if (!string.IsNullOrEmpty(_selectedFileName))
+                                {
+                                    <MudText Typo="Typo.body2" Class="ml-2">@_selectedFileName</MudText>
+                                }
+                            </MudItem>
+                            <MudItem xs="12">
+                                @if (_uploadedDocuments.Any())
+                                {
+                                    <MudTable Items="@_uploadedDocuments" Hover="true" Dense="true" Class="mt-4">
+                                        <HeaderContent>
+                                            <MudTh>Document Type</MudTh>
+                                            <MudTh>File Name</MudTh>
+                                            <MudTh>Status</MudTh>
+                                            <MudTh>Action</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd DataLabel="Document Type">@context.DocumentType</MudTd>
+                                            <MudTd DataLabel="File Name">@context.FileName</MudTd>
+                                            <MudTd DataLabel="Status">
+                                                @if (context.Id > 0)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Uploaded</MudChip>
+                                                }
+                                                else
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Pending</MudChip>
+                                                }
+                                            </MudTd>
+                                            <MudTd DataLabel="Action">
+                                                @if (context.Id > 0)
+                                                {
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                                  Color="Color.Error" 
+                                                                  Size="Size.Small"
+                                                                  OnClick="@(() => DeleteDocument(context))" />
+                                                }
+                                                else
+                                                {
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                                  Color="Color.Error" 
+                                                                  Size="Size.Small"
+                                                                  OnClick="@(() => RemovePendingDocument(context))" />
+                                                }
+                                            </MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Default" Class="mt-4">No documents uploaded.</MudText>
+                                }
+                            </MudItem>
+                        </MudGrid>
+
+                <div class="d-flex justify-end gap-2 mt-4">
+                    <MudButton Variant="Variant.Text" OnClick="NavigateBack">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" 
+                              Color="Color.Primary" 
+                              Disabled="@(!isValid || _isSaving)"
+                              OnClick="SaveStaff">
+                        @if (_isSaving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span>@(IsEditMode ? "Update" : "Save")</span>
+                        }
+                    </MudButton>
+                </div>
+            </MudPaper>
+        </MudForm>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int StaffId { get; set; }
+    
+    private bool IsEditMode => StaffId > 0;
+    private MudForm? form;
+    private bool isValid;
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private int _tenantId;
+    private int _userId;
+    
+    private CreateStaffRequest _request = new();
+    private UpdateStaffRequest? _updateRequest;
+    
+    // Dropdowns
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _divisions = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _departments = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _positions = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _documentTypes = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _employmentStatuses = new();
+    private List<HRMS.Core.Domain.Entities.MasterDropdown> _genders = new();
+    private List<StaffDto> _reportingManagers = new();
+    
+    // Photo upload
+    private InputFile? _photoInputRef;
+    private string _photoPreviewUrl = string.Empty;
+    private string _existingPhotoUrl = string.Empty;
+    private IBrowserFile? _selectedPhoto;
+    private string _photoFileName = string.Empty;
+    private bool _isUploadingPhoto = false;
+    
+    // Document upload
+    private InputFile? _fileInputRef;
+    private string _selectedDocumentType = string.Empty;
+    private string _selectedFileName = string.Empty;
+    private IBrowserFile? _selectedFile;
+    private bool _isUploadingDocument = false;
+    private List<LegalDocumentDto> _uploadedDocuments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                Navigation.NavigateTo("/signin");
+                return;
+            }
+
+            var tenantIdClaim = user.FindFirst("TenantId")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
+            {
+                Snackbar.Add("Authentication error: Missing tenant or user information", Severity.Error);
+                Navigation.NavigateTo("/hrms/employees");
+                return;
+            }
+
+            _tenantId = int.Parse(tenantIdClaim);
+            _userId = int.Parse(userIdClaim);
+
+            // Load sequentially to avoid DbContext concurrency issues
+            await LoadDropdownsAsync();
+            
+            // Small delay to ensure DbContext operations complete
+            await Task.Delay(50);
+            
+            if (IsEditMode)
+            {
+                await LoadStaffAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error initializing StaffForm page");
+            _isLoading = false;
+            // Navigate after a short delay to allow renderer to stabilize
+            await Task.Delay(100);
+            Navigation.NavigateTo("/hrms/employees");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadDropdownsAsync()
+    {
+        try
+        {
+            Logger?.LogInformation("Loading dropdowns for TenantId: {TenantId}", _tenantId);
+            
+            if (_tenantId <= 0)
+            {
+                Logger?.LogWarning("Invalid TenantId: {TenantId}", _tenantId);
+                Snackbar.Add("Invalid tenant information. Please sign in again.", Severity.Error);
+                return;
+            }
+
+            var divisions = await MasterDropdownService.GetByCategoryAsync("Division", _tenantId);
+            _divisions = divisions?.ToList() ?? new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            Logger?.LogInformation("Loaded {Count} divisions", _divisions.Count);
+            
+            var departments = await MasterDropdownService.GetByCategoryAsync("Department", _tenantId);
+            _departments = departments?.ToList() ?? new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            Logger?.LogInformation("Loaded {Count} departments", _departments.Count);
+            
+            var positions = await MasterDropdownService.GetByCategoryAsync("Position", _tenantId);
+            _positions = positions?.ToList() ?? new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            Logger?.LogInformation("Loaded {Count} positions", _positions.Count);
+            
+            var documentTypes = await MasterDropdownService.GetByCategoryAsync("DocumentType", _tenantId);
+            _documentTypes = documentTypes?.ToList() ?? new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            Logger?.LogInformation("Loaded {Count} document types", _documentTypes.Count);
+            
+            var employmentStatuses = await MasterDropdownService.GetByCategoryAsync("EmploymentStatus", _tenantId);
+            _employmentStatuses = employmentStatuses?.ToList() ?? new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            Logger?.LogInformation("Loaded {Count} employment statuses", _employmentStatuses.Count);
+            
+            // If no employment statuses found in MasterDropdown, use defaults
+            if (!_employmentStatuses.Any())
+            {
+                _employmentStatuses = new List<HRMS.Core.Domain.Entities.MasterDropdown>
+                {
+                    new() { Name = "Active" },
+                    new() { Name = "Inactive" },
+                    new() { Name = "On Leave" },
+                    new() { Name = "Terminated" }
+                };
+            }
+            
+            var genders = await MasterDropdownService.GetByCategoryAsync("Gender", _tenantId);
+            _genders = genders?.ToList() ?? new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            Logger?.LogInformation("Loaded {Count} genders", _genders.Count);
+            
+            // If no genders found in MasterDropdown, use defaults
+            if (!_genders.Any())
+            {
+                _genders = new List<HRMS.Core.Domain.Entities.MasterDropdown>
+                {
+                    new() { Name = "Male" },
+                    new() { Name = "Female" },
+                    new() { Name = "Other" }
+                };
+            }
+            
+            // Load reporting managers (all active staff for the tenant)
+            await LoadReportingManagersAsync();
+            
+            // Auto-generate Employee Code if in create mode
+            if (!IsEditMode && string.IsNullOrWhiteSpace(_request.EmployeeCode))
+            {
+                _request.EmployeeCode = await GenerateEmployeeCodeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error loading dropdowns for TenantId: {TenantId}", _tenantId);
+            Snackbar.Add($"Error loading dropdowns: {ex.Message}", Severity.Error);
+            // Initialize empty lists to prevent null reference
+            _divisions = new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            _departments = new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            _positions = new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            _documentTypes = new List<HRMS.Core.Domain.Entities.MasterDropdown>();
+            _employmentStatuses = new List<HRMS.Core.Domain.Entities.MasterDropdown>
+            {
+                new() { Name = "Active" },
+                new() { Name = "Inactive" },
+                new() { Name = "On Leave" },
+                new() { Name = "Terminated" }
+            };
+            _genders = new List<HRMS.Core.Domain.Entities.MasterDropdown>
+            {
+                new() { Name = "Male" },
+                new() { Name = "Female" },
+                new() { Name = "Other" }
+            };
+        }
+    }
+
+    private async Task LoadReportingManagersAsync()
+    {
+        try
+        {
+            // Get all staff for the tenant using StaffService
+            var allStaff = await StaffService.GetPagedAsync(_tenantId, 1, 1000, null, null, null);
+            _reportingManagers = allStaff.Items
+                .Where(s => s.IsActive)
+                .Select(s => new StaffDto
+                {
+                    StaffId = s.StaffId,
+                    Name = s.Name ?? string.Empty,
+                    EmployeeCode = s.EmployeeCode ?? string.Empty
+                })
+                .ToList();
+            
+            // Exclude current staff if in edit mode
+            if (IsEditMode && StaffId > 0)
+            {
+                _reportingManagers = _reportingManagers.Where(s => s.StaffId != StaffId).ToList();
+            }
+            
+            Logger?.LogInformation("Loaded {Count} reporting managers", _reportingManagers.Count);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error loading reporting managers for TenantId: {TenantId}", _tenantId);
+            Snackbar.Add("Error loading reporting managers. Please try again.", Severity.Warning);
+            _reportingManagers = new List<StaffDto>();
+        }
+    }
+    
+    private async Task<string> GenerateEmployeeCodeAsync()
+    {
+        try
+        {
+            // Get the last employee code for this tenant
+            var lastStaff = await StaffService.GetLastEmployeeCodeAsync(_tenantId);
+            int nextNumber = 1;
+            
+            if (lastStaff != null && !string.IsNullOrEmpty(lastStaff.EmployeeCode))
+            {
+                // Extract number from employee code (format: EMP0010001, EMP0010002, etc.)
+                var codeParts = lastStaff.EmployeeCode.Where(char.IsDigit).ToArray();
+                if (codeParts.Length > 0)
+                {
+                    // Get the last 4 digits (sequential number)
+                    var last4Digits = codeParts.Length >= 4 
+                        ? new string(codeParts.Skip(codeParts.Length - 4).Take(4).ToArray())
+                        : new string(codeParts);
+                    
+                    if (int.TryParse(last4Digits, out int lastNumber))
+                    {
+                        nextNumber = lastNumber + 1;
+                    }
+                }
+            }
+            
+            // Format: EMP + TenantId (3 digits) + Sequential Number (4 digits) (e.g., EMP0010001, EMP0010002)
+            return $"EMP{_tenantId:D3}{nextNumber:D4}";
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error generating employee code");
+            // Fallback to timestamp-based code
+            return $"EMP{_tenantId:D3}{DateTime.Now:yyyyMMddHHmmss}";
+        }
+    }
+
+    private async Task LoadStaffAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            var staff = await StaffService.GetByIdAsync(StaffId, _tenantId);
+            if (staff == null)
+            {
+                Snackbar.Add("Staff not found", Severity.Error);
+                Navigation.NavigateTo("/hrms/employees");
+                return;
+            }
+
+            _updateRequest = new UpdateStaffRequest
+            {
+                StaffId = staff.StaffId,
+                EmployeeCode = staff.EmployeeCode,
+                Name = staff.Name,
+                Company = staff.Company,
+                DateOfBirth = staff.DateOfBirth,
+                GenderId = staff.GenderId,
+                Email = staff.Email,
+                PhoneNumber = staff.PhoneNumber,
+                Address = staff.Address,
+                IdentityCard = staff.IdentityCard,
+                Division = staff.Division,
+                Department = staff.Department,
+                Position = staff.Position,
+                EmploymentStatusId = staff.EmploymentStatusId,
+                DateJoined = staff.DateJoined,
+                RetirementDate = staff.RetirementDate,
+                ReportingManagerId = staff.ReportingManagerId,
+                EducationDetails = staff.EducationDetails.ToList(),
+                ExperienceDetails = staff.ExperienceDetails.ToList()
+            };
+            
+            _request.EmployeeCode = _updateRequest.EmployeeCode;
+            _request.Name = _updateRequest.Name;
+            _request.Company = _updateRequest.Company;
+            _request.DateOfBirth = _updateRequest.DateOfBirth;
+            _request.GenderId = _updateRequest.GenderId;
+            _request.Email = _updateRequest.Email;
+            _request.PhoneNumber = _updateRequest.PhoneNumber;
+            _request.Address = _updateRequest.Address;
+            _request.IdentityCard = _updateRequest.IdentityCard;
+            _request.Division = _updateRequest.Division;
+            _request.Department = _updateRequest.Department;
+            _request.Position = _updateRequest.Position;
+            _request.EmploymentStatusId = _updateRequest.EmploymentStatusId;
+            _request.DateJoined = _updateRequest.DateJoined;
+            _request.RetirementDate = _updateRequest.RetirementDate;
+            _request.ReportingManagerId = _updateRequest.ReportingManagerId;
+            _request.EducationDetails = _updateRequest.EducationDetails;
+            _request.ExperienceDetails = _updateRequest.ExperienceDetails;
+            
+            // Load existing documents
+            if (staff.LegalDocuments != null && staff.LegalDocuments.Any())
+            {
+                _uploadedDocuments = staff.LegalDocuments.ToList();
+            }
+            
+            // Load existing photo
+            if (!string.IsNullOrEmpty(staff.Photo))
+            {
+                _existingPhotoUrl = $"/{staff.Photo.Replace('\\', '/')}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading staff: {ex.Message}", Severity.Error);
+            Navigation.NavigateTo("/hrms/employees");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void AddEducationDetail()
+    {
+        _request.EducationDetails.Add(new EducationDetailDto());
+        StateHasChanged();
+    }
+
+    private void RemoveEducationDetail(EducationDetailDto education)
+    {
+        _request.EducationDetails.Remove(education);
+        StateHasChanged();
+    }
+
+    private void AddExperienceDetail()
+    {
+        _request.ExperienceDetails.Add(new ExperienceDetailDto());
+        StateHasChanged();
+    }
+
+    private void RemoveExperienceDetail(ExperienceDetailDto experience)
+    {
+        _request.ExperienceDetails.Remove(experience);
+        StateHasChanged();
+    }
+
+    private async Task SaveStaff()
+    {
+        // Basic validation
+        if (string.IsNullOrWhiteSpace(_request.Name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_request.Email))
+        {
+            Snackbar.Add("Email is required", Severity.Warning);
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_request.Division))
+        {
+            Snackbar.Add("Division is required", Severity.Warning);
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_request.Department))
+        {
+            Snackbar.Add("Department is required", Severity.Warning);
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_request.Position))
+        {
+            Snackbar.Add("Position is required", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _isSaving = true;
+            
+            if (IsEditMode && _updateRequest != null)
+            {
+                _updateRequest.Name = _request.Name;
+                _updateRequest.Company = _request.Company;
+                _updateRequest.DateOfBirth = _request.DateOfBirth;
+                _updateRequest.Email = _request.Email;
+                _updateRequest.PhoneNumber = _request.PhoneNumber;
+                _updateRequest.Address = _request.Address;
+                _updateRequest.IdentityCard = _request.IdentityCard;
+                _updateRequest.Division = _request.Division;
+                _updateRequest.Department = _request.Department;
+                _updateRequest.Position = _request.Position;
+                _updateRequest.DateJoined = _request.DateJoined;
+                _updateRequest.RetirementDate = _request.RetirementDate;
+                _updateRequest.ReportingManagerId = _request.ReportingManagerId;
+                _updateRequest.EducationDetails = _request.EducationDetails;
+                _updateRequest.ExperienceDetails = _request.ExperienceDetails;
+                
+                await StaffService.UpdateAsync(_updateRequest, _tenantId, _userId, null);
+                Snackbar.Add("Employee updated successfully", Severity.Success);
+                
+                // Reload the staff data to refresh the form
+                await LoadStaffAsync();
+            }
+            else
+            {
+                var createdStaff = await StaffService.CreateAsync(_request, _tenantId, _userId, null);
+                Snackbar.Add("Employee created successfully", Severity.Success);
+                
+                // Upload pending documents after staff is created
+                if (_pendingFiles.Any() && createdStaff != null)
+                {
+                    foreach (var pendingFile in _pendingFiles)
+                    {
+                        try
+                        {
+                            using var stream = pendingFile.File.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                            await StaffService.UploadDocumentAsync(createdStaff.StaffId, _tenantId, pendingFile.DocumentType, stream, pendingFile.FileName, _userId);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger?.LogError(ex, "Error uploading pending document: {FileName}", pendingFile.FileName);
+                            Snackbar.Add($"Error uploading {pendingFile.FileName}: {ex.Message}", Severity.Warning);
+                        }
+                    }
+                }
+                
+                // Clear pending files after upload
+                _pendingFiles.Clear();
+                
+                // Upload pending photo if exists
+                if (_selectedPhoto != null && createdStaff != null)
+                {
+                    try
+                    {
+                        using var stream = _selectedPhoto.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                        var filePath = await StaffService.UploadPhotoAsync(createdStaff.StaffId, _tenantId, stream, _selectedPhoto.Name, _userId);
+                        _existingPhotoUrl = $"/{filePath.Replace('\\', '/')}";
+                        _photoPreviewUrl = string.Empty;
+                        _selectedPhoto = null;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.LogError(ex, "Error uploading pending photo: {FileName}", _selectedPhoto.Name);
+                        Snackbar.Add($"Error uploading photo: {ex.Message}", Severity.Warning);
+                    }
+                }
+                
+                // Redirect to edit form with the new StaffId to stay on the form
+                if (createdStaff != null)
+                {
+                    Navigation.NavigateTo($"/hrms/employees/form/{createdStaff.StaffId}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving employee: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/hrms/employees");
+    }
+
+    private async Task TriggerFileInput()
+    {
+        if (string.IsNullOrEmpty(_selectedDocumentType))
+        {
+            Snackbar.Add("Please select a document type first", Severity.Warning);
+            return;
+        }
+
+        if (_fileInputRef != null)
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "document.getElementById('fileInput').click();");
+        }
+    }
+
+    private async Task TriggerPhotoInput()
+    {
+        await JSRuntime.InvokeVoidAsync("eval", "document.getElementById('photoInput').click();");
+    }
+
+    private async Task HandlePhotoSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            if (e.File == null)
+            {
+                return;
+            }
+
+            // Validate file type
+            var extension = Path.GetExtension(e.File.Name).ToLowerInvariant();
+            if (!new[] { ".jpg", ".jpeg", ".png", ".gif" }.Contains(extension))
+            {
+                Snackbar.Add("Invalid file type. Please select JPG, PNG, or GIF image.", Severity.Error);
+                return;
+            }
+
+            // Validate file size (5MB max)
+            const long maxFileSize = 5 * 1024 * 1024;
+            if (e.File.Size > maxFileSize)
+            {
+                Snackbar.Add("File size exceeds 5MB limit", Severity.Error);
+                return;
+            }
+
+            _selectedPhoto = e.File;
+            _photoFileName = e.File.Name;
+
+            // Create preview using base64
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            var imageBytes = memoryStream.ToArray();
+            var base64Image = Convert.ToBase64String(imageBytes);
+            _photoPreviewUrl = $"data:image/{extension.TrimStart('.')};base64,{base64Image}";
+            
+            // Clear existing photo URL when new photo is selected
+            _existingPhotoUrl = string.Empty;
+            
+            // If in edit mode, upload immediately
+            if (IsEditMode && StaffId > 0)
+            {
+                await UploadPhotoAsync();
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error handling photo selection");
+            Snackbar.Add($"Error selecting photo: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task UploadPhotoAsync()
+    {
+        if (_selectedPhoto == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _isUploadingPhoto = true;
+            StateHasChanged();
+
+            using var stream = _selectedPhoto.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            var filePath = await StaffService.UploadPhotoAsync(StaffId, _tenantId, stream, _selectedPhoto.Name, _userId);
+            
+            // Update preview URL to use the uploaded file
+            _existingPhotoUrl = $"/{filePath.Replace('\\', '/')}";
+            _photoPreviewUrl = string.Empty;
+            _photoFileName = string.Empty;
+            _selectedPhoto = null;
+
+            Snackbar.Add("Photo uploaded successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error uploading photo");
+            Snackbar.Add($"Error uploading photo: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUploadingPhoto = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_selectedDocumentType))
+            {
+                Snackbar.Add("Please select a document type first", Severity.Warning);
+                return;
+            }
+
+            if (e.File == null)
+            {
+                return;
+            }
+
+            // Validate file size (5MB max)
+            const long maxFileSize = 5 * 1024 * 1024;
+            if (e.File.Size > maxFileSize)
+            {
+                Snackbar.Add("File size exceeds 5MB limit", Severity.Error);
+                return;
+            }
+
+            _selectedFile = e.File;
+            _selectedFileName = e.File.Name;
+
+            // If in edit mode, upload immediately
+            if (IsEditMode && StaffId > 0)
+            {
+                await UploadDocumentAsync();
+            }
+            else
+            {
+                // For create mode, add to pending list
+                _uploadedDocuments.Add(new LegalDocumentDto
+                {
+                    Id = 0,
+                    DocumentType = _selectedDocumentType,
+                    FileName = _selectedFileName
+                });
+                _pendingFiles.Add(new PendingFile
+                {
+                    File = _selectedFile!,
+                    DocumentType = _selectedDocumentType,
+                    FileName = _selectedFileName
+                });
+                StateHasChanged();
+            }
+
+            // Reset selection
+            _selectedDocumentType = string.Empty;
+            _selectedFileName = string.Empty;
+            _selectedFile = null;
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error handling file selection");
+            Snackbar.Add($"Error selecting file: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task UploadDocumentAsync()
+    {
+        if (_selectedFile == null || string.IsNullOrEmpty(_selectedDocumentType))
+        {
+            return;
+        }
+
+        try
+        {
+            _isUploadingDocument = true;
+            StateHasChanged();
+
+            using var stream = _selectedFile.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            await StaffService.UploadDocumentAsync(StaffId, _tenantId, _selectedDocumentType, stream, _selectedFile.Name, _userId);
+            
+            // Reload documents
+            var staff = await StaffService.GetByIdAsync(StaffId, _tenantId);
+            if (staff != null && staff.LegalDocuments != null)
+            {
+                _uploadedDocuments = staff.LegalDocuments.ToList();
+            }
+
+            Snackbar.Add("Document uploaded successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error uploading document");
+            Snackbar.Add($"Error uploading document: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUploadingDocument = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteDocument(LegalDocumentDto document)
+    {
+        if (document.Id <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await StaffService.DeleteDocumentAsync(document.Id, _tenantId, _userId);
+            if (result)
+            {
+                _uploadedDocuments.Remove(document);
+                Snackbar.Add("Document deleted successfully", Severity.Success);
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add("Error deleting document", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Error deleting document");
+            Snackbar.Add($"Error deleting document: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void RemovePendingDocument(LegalDocumentDto document)
+    {
+        if (document.Id > 0)
+        {
+            return; // Only remove pending documents
+        }
+
+        _uploadedDocuments.Remove(document);
+        
+        // Also remove from pending files
+        var pendingFile = _pendingFiles.FirstOrDefault(p => p.FileName == document.FileName && p.DocumentType == document.DocumentType);
+        if (pendingFile != null)
+        {
+            _pendingFiles.Remove(pendingFile);
+        }
+        
+        StateHasChanged();
+    }
+
+    private class PendingFile
+    {
+        public IBrowserFile File { get; set; } = null!;
+        public string DocumentType { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+    }
+
+    private List<PendingFile> _pendingFiles = new();
+
+    private void CalculateTotalExperience(ExperienceDetailDto experience)
+    {
+        if (experience.StartDate.HasValue && experience.EndDate.HasValue)
+        {
+            var startDate = experience.StartDate.Value;
+            var endDate = experience.EndDate.Value;
+            
+            if (endDate >= startDate)
+            {
+                var years = endDate.Year - startDate.Year;
+                var months = endDate.Month - startDate.Month;
+                
+                if (months < 0)
+                {
+                    years--;
+                    months += 12;
+                }
+                
+                if (years > 0 && months > 0)
+                {
+                    experience.TotalExperience = $"{years} year(s) {months} month(s)";
+                }
+                else if (years > 0)
+                {
+                    experience.TotalExperience = $"{years} year(s)";
+                }
+                else if (months > 0)
+                {
+                    experience.TotalExperience = $"{months} month(s)";
+                }
+                else
+                {
+                    experience.TotalExperience = "Less than 1 month";
+                }
+            }
+            else
+            {
+                experience.TotalExperience = string.Empty;
+            }
+        }
+        else
+        {
+            experience.TotalExperience = string.Empty;
+        }
+        
+        StateHasChanged();
+    }
+}

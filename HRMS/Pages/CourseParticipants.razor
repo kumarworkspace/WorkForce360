@@ -1,0 +1,1000 @@
+@page "/tms/planning/{CoursePlanId:int}/participants"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ICourseParticipantService ParticipantService
+@inject IStaffService StaffService
+@inject IAuthorizationHelper AuthorizationHelper
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ILogger<CourseParticipants> Logger
+@inject IJSRuntime JS
+
+<PageTitle>Course Participants & Attendance</PageTitle>
+
+@if (_isLoading)
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="400px" Class="mt-4" />
+    </MudContainer>
+}
+else if (_courseDetail == null)
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <MudAlert Severity="Severity.Error">Course plan not found</MudAlert>
+        <MudButton OnClick="NavigateBack" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">
+            Back to List
+        </MudButton>
+    </MudContainer>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <!-- Header Section -->
+        <div class="d-flex align-center justify-space-between mb-4">
+            <div>
+                <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">
+                    Course Participants & Attendance
+                </MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_courseDetail.CourseTitle</MudText>
+            </div>
+            <MudButton Variant="Variant.Outlined"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.ArrowBack"
+                      OnClick="NavigateBack">
+                Back to List
+            </MudButton>
+        </div>
+
+        <!-- Tabs -->
+        <MudPaper Elevation="2" Style="border-radius: 8px;">
+            <MudTabs Elevation="0" Rounded="true" Color="Color.Primary" ActivePanelIndex="@_activeTab" ActivePanelIndexChanged="OnTabChanged">
+                <!-- Tab 1: Course Details & Add Participants -->
+                <MudTabPanel Text="Participants" Icon="@Icons.Material.Filled.Group">
+                    <MudGrid Class="pa-4">
+                        <!-- Course Information Card -->
+                        <MudItem xs="12">
+                            <MudPaper Elevation="1" Class="pa-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px;">
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" md="2">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.9;">Course Code</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@_courseDetail.CourseCode</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.9;">Date Range</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600;">
+                                            @_courseDetail.StartDate.ToString("dd MMM") - @_courseDetail.EndDate.ToString("dd MMM yyyy")
+                                        </MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.9;">Timing</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600;">
+                                            @_courseDetail.StartTime.ToString(@"hh\:mm") - @_courseDetail.EndTime.ToString(@"hh\:mm")
+                                        </MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.9;">Duration</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@_courseDetail.CourseDuration hours</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.9;">Trainer</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@_courseDetail.TrainerName</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.9;">Venue</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: 600;">@_courseDetail.Venue</MudText>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        </MudItem>
+
+                        <!-- Add Participants Section -->
+                        @if (_accessLevel >= 2)
+                        {
+                        <MudItem xs="12">
+                            <MudPaper Elevation="1" Class="pa-4">
+                                <MudText Typo="Typo.h6" Class="mb-3" Style="color: #1a237e; font-weight: 600;">
+                                    Add Participants
+                                </MudText>
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12" md="10">
+                                        <MudSelect T="int"
+                                                  Label="Select Staff Members"
+                                                  MultiSelection="true"
+                                                  @bind-SelectedValues="_selectedStaffIds"
+                                                  Variant="Variant.Outlined"
+                                                  AnchorOrigin="Origin.BottomCenter"
+                                                  ToStringFunc="@(id => GetStaffDisplayName(id))">
+                                            @foreach (var staff in _availableStaff)
+                                            {
+                                                <MudSelectItem Value="@staff.StaffId">@staff.Name (@staff.EmployeeCode)</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudButton Variant="Variant.Filled"
+                                                  Color="Color.Primary"
+                                                  FullWidth="true"
+                                                  Style="height: 56px;"
+                                                  OnClick="AddParticipants"
+                                                  Disabled="@(!_selectedStaffIds.Any() || _adding)">
+                                            @if (_adding)
+                                            {
+                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                            }
+                                            else
+                                            {
+                                                <span>Add</span>
+                                            }
+                                        </MudButton>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        </MudItem>
+                        }
+
+                        <!-- Participants List -->
+                        <MudItem xs="12">
+                            <MudPaper Elevation="1" Class="pa-4">
+                                <div class="d-flex align-center justify-space-between mb-3">
+                                    <MudText Typo="Typo.h6" Style="color: #1a237e; font-weight: 600;">
+                                        Current Participants (@_courseDetail.Participants.Count)
+                                    </MudText>
+                                    <MudButton Variant="Variant.Outlined"
+                                              Color="Color.Primary"
+                                              Size="Size.Small"
+                                              StartIcon="@Icons.Material.Filled.Refresh"
+                                              OnClick="LoadCourseData">
+                                        Refresh
+                                    </MudButton>
+                                </div>
+
+                                @if (!_courseDetail.Participants.Any())
+                                {
+                                    <div class="pa-4 text-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.GroupOff" Size="Size.Large" Color="Color.Secondary" />
+                                        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">
+                                            No participants added yet
+                                        </MudText>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <MudTable Items="@_courseDetail.Participants" Hover="true" Dense="true" Striped="true">
+                                        <HeaderContent>
+                                            <MudTh Style="background-color: #1a237e; color: white;">Employee Code</MudTh>
+                                            <MudTh Style="background-color: #1a237e; color: white;">Name</MudTh>
+                                            <MudTh Style="background-color: #1a237e; color: white;">Department</MudTh>
+                                            <MudTh Style="background-color: #1a237e; color: white;">Position</MudTh>
+                                            <MudTh Style="background-color: #1a237e; color: white;">Email</MudTh>
+                                            <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Enrolled On</MudTh>
+                                            <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Action</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd DataLabel="Employee Code">@context.EmployeeCode</MudTd>
+                                            <MudTd DataLabel="Name">@context.StaffName</MudTd>
+                                            <MudTd DataLabel="Department">@context.Department</MudTd>
+                                            <MudTd DataLabel="Position">@context.Position</MudTd>
+                                            <MudTd DataLabel="Email">@context.Email</MudTd>
+                                            <MudTd DataLabel="Enrolled On" Style="text-align: center;">@context.CreatedDate.ToString("dd MMM yyyy")</MudTd>
+                                            <MudTd DataLabel="Action" Style="text-align: center;">
+                                                @if (_accessLevel >= 2)
+                                                {
+                                                    <MudTooltip Text="Remove Participant">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                      Size="Size.Small"
+                                                                      Color="Color.Error"
+                                                                      OnClick="@(() => RemoveParticipant(context.StaffId))" />
+                                                    </MudTooltip>
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+                                                }
+                                            </MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                }
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Tab 2: Attendance Update -->
+                <MudTabPanel Text="Attendance" Icon="@Icons.Material.Filled.CalendarMonth">
+                    <div class="pa-4">
+                        <div class="d-flex align-center justify-space-between mb-3">
+                            <MudText Typo="Typo.h6" Style="color: #1a237e; font-weight: 600;">
+                                Date-wise Attendance
+                            </MudText>
+                            <div class="d-flex gap-2 align-center">
+                                @if (_hasUnsavedChanges)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@_pendingChanges.Count Unsaved</MudChip>
+                                }
+                                <MudButton Variant="Variant.Outlined"
+                                          Color="Color.Secondary"
+                                          Size="Size.Small"
+                                          StartIcon="@Icons.Material.Filled.QrCodeScanner"
+                                          OnClick="@(() => Navigation.NavigateTo($"/tms/attendance/mark/{CoursePlanId}"))">
+                                    Scan QR
+                                </MudButton>
+                                @if (_canMarkAttendance)
+                                {
+                                    <MudButton Variant="Variant.Filled"
+                                              Color="Color.Success"
+                                              Size="Size.Small"
+                                              StartIcon="@Icons.Material.Filled.Save"
+                                              OnClick="SaveCurrentAttendance"
+                                              Disabled="@(_savingAttendance || !_attendanceGrid.Any())">
+                                        @if (_savingAttendance)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        }
+                                        Save Attendance
+                                    </MudButton>
+                                }
+                                <MudButton Variant="Variant.Outlined"
+                                          Color="Color.Primary"
+                                          Size="Size.Small"
+                                          StartIcon="@Icons.Material.Filled.Refresh"
+                                          OnClick="LoadAttendanceGrid">
+                                    Refresh
+                                </MudButton>
+                            </div>
+                        </div>
+
+                        @if (_loadingAttendance)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                        }
+                        else if (!_attendanceGrid.Any())
+                        {
+                            <div class="pa-4 text-center">
+                                <MudIcon Icon="@Icons.Material.Filled.EventBusy" Size="Size.Large" Color="Color.Secondary" />
+                                <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">
+                                    No participants added. Please add participants first.
+                                </MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="overflow-x: auto;">
+                                <table class="mud-table mud-xs-table mud-table-dense mud-table-hover mud-table-striped" style="min-width: 800px;">
+                                    <thead>
+                                        <tr>
+                                            <th style="background-color: #1a237e; color: white; position: sticky; left: 0; z-index: 10; min-width: 180px;">
+                                                Participant
+                                            </th>
+                                            @foreach (var date in _dateRange)
+                                            {
+                                                <th style="background-color: #1a237e; color: white; text-align: center; min-width: 80px;">
+                                                    <div>@date.ToString("dd MMM")</div>
+                                                    <div style="font-size: 0.75rem; opacity: 0.8;">@date.ToString("ddd")</div>
+                                                </th>
+                                            }
+                                            <th style="background-color: #1a237e; color: white; text-align: center; min-width: 60px;">Total</th>
+                                            <th style="background-color: #1a237e; color: white; text-align: center; min-width: 60px;">Present</th>
+                                            <th style="background-color: #1a237e; color: white; text-align: center; min-width: 70px;">Att. %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var participant in _attendanceGrid)
+                                        {
+                                            var enrolledOn = _courseDetail?.Participants
+                                                .FirstOrDefault(p => p.StaffId == participant.StaffId)?.CreatedDate;
+                                            <tr>
+                                                <td style="position: sticky; left: 0; background-color: white; z-index: 5; font-weight: 500;">
+                                                    <div>@participant.StaffName</div>
+                                                    <div style="font-size: 0.75rem; color: #666;">@participant.EmployeeCode</div>
+                                                    @if (enrolledOn.HasValue)
+                                                    {
+                                                        <div style="font-size: 0.7rem; color: #999;">Enrolled: @enrolledOn.Value.ToString("dd MMM yyyy")</div>
+                                                    }
+                                                </td>
+                                                @foreach (var date in _dateRange)
+                                                {
+                                                    <td style="text-align: center;">
+                                                        <MudCheckBox T="bool"
+                                                                    Checked="@participant.AttendanceByDate.GetValueOrDefault(date, false)"
+                                                                    CheckedChanged="@((bool val) => UpdateAttendance(participant.StaffId, date, val))"
+                                                                    Color="Color.Success"
+                                                                    Dense="true"
+                                                                    Disabled="@(!_canMarkAttendance)" />
+                                                    </td>
+                                                }
+                                                <td style="text-align: center; color: #555;">@participant.TotalDays</td>
+                                                <td style="text-align: center; color: #388e3c; font-weight: 600;">@participant.PresentDays</td>
+                                                <td style="text-align: center;">
+                                                    <MudChip T="string" Size="Size.Small"
+                                                             Color="@(participant.AttendancePercentage >= 75 ? Color.Success : Color.Warning)">
+                                                        @participant.AttendancePercentage.ToString("F1")%
+                                                    </MudChip>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </MudTabPanel>
+
+                <!-- Tab 3: Results & Certificates -->
+                <MudTabPanel Text="Results" Icon="@Icons.Material.Filled.EmojiEvents">
+                    <div class="pa-4">
+                        <div class="d-flex align-center justify-space-between mb-3">
+                            <MudText Typo="Typo.h6" Style="color: #1a237e; font-weight: 600;">
+                                Course Results & Certificates
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined"
+                                      Color="Color.Primary"
+                                      Size="Size.Small"
+                                      StartIcon="@Icons.Material.Filled.Refresh"
+                                      OnClick="LoadResults">
+                                Refresh
+                            </MudButton>
+                        </div>
+
+                        @if (!IsCourseEnded())
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                                Course is in progress. Results can be entered after the course ends on @_courseDetail?.EndDate.ToString("dd MMM yyyy").
+                            </MudAlert>
+                        }
+
+                        @if (_loadingResults)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                        }
+                        else if (!_results.Any())
+                        {
+                            <div class="pa-4 text-center">
+                                <MudIcon Icon="@Icons.Material.Filled.AssignmentLate" Size="Size.Large" Color="Color.Secondary" />
+                                <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">
+                                    No participants found. Please add participants first.
+                                </MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudTable Items="@_results" Hover="true" Dense="true" Striped="true">
+                                <HeaderContent>
+                                    <MudTh Style="background-color: #1a237e; color: white;">S.No</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white;">Employee Code</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white;">Participant Name</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white;">Department</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Enrolled On</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Course Start Date</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Course End Date</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Total Days</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Present</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Att. %</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Marks</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Status</MudTh>
+                                    <MudTh Style="background-color: #1a237e; color: white; text-align: center;">Action</MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="result">
+                                    @{
+                                        var enrolledDate = _courseDetail?.Participants
+                                            .FirstOrDefault(p => p.StaffId == result.StaffId)?.CreatedDate;
+                                    }
+                                    <MudTd DataLabel="S.No">@(_results.IndexOf(result) + 1)</MudTd>
+                                    <MudTd DataLabel="Employee Code">@result.EmployeeCode</MudTd>
+                                    <MudTd DataLabel="Participant Name">@result.StaffName</MudTd>
+                                    <MudTd DataLabel="Department">@result.Department</MudTd>
+                                    <MudTd DataLabel="Enrolled On" Style="text-align: center;">
+                                        @(enrolledDate.HasValue ? enrolledDate.Value.ToString("dd MMM yyyy") : "-")
+                                    </MudTd>
+                                    <MudTd DataLabel="Course Start Date" Style="text-align: center;">@_courseDetail?.StartDate.ToString("dd-MM-yyyy")</MudTd>
+                                    <MudTd DataLabel="Course End Date" Style="text-align: center;">@_courseDetail?.EndDate.ToString("dd-MM-yyyy")</MudTd>
+                                    <MudTd DataLabel="Total Days" Style="text-align: center;">@result.TotalDays</MudTd>
+                                    <MudTd DataLabel="Present" Style="text-align: center; color: #388e3c; font-weight: 600;">@result.PresentDays</MudTd>
+                                    <MudTd DataLabel="Att. %" Style="text-align: center;">
+                                        <MudChip T="string" Size="Size.Small"
+                                                 Color="@(result.AttendancePercentage >= 75 ? Color.Success : Color.Warning)">
+                                            @result.AttendancePercentage.ToString("F1")%
+                                        </MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Marks" Style="text-align: center;">
+                                        @if (_canEditResults && IsCourseEnded())
+                                        {
+                                            <MudNumericField T="decimal?"
+                                                            Value="@result.Marks"
+                                                            ValueChanged="@((decimal? val) => UpdateMarks(result.StaffId, val))"
+                                                            Variant="Variant.Outlined"
+                                                            Min="0"
+                                                            Max="100"
+                                                            Style="width: 80px;"
+                                                            Margin="Margin.Dense" />
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2">@(result.Marks.HasValue ? result.Marks.Value.ToString("F1") : "-")</MudText>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Status" Style="text-align: center;">
+                                        @if (_canEditResults && IsCourseEnded())
+                                        {
+                                            <MudSwitch T="bool"
+                                                      Value="@(result.ResultStatus == "Pass")"
+                                                      ValueChanged="@((bool val) => UpdateResultStatus(result.StaffId, val))"
+                                                      Color="Color.Success"
+                                                      Size="Size.Small" />
+                                        }
+                                        @if (result.ResultStatus == "Pass")
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Pass</MudChip>
+                                        }
+                                        else if (result.ResultStatus == "Fail")
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error">Fail</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Pending</MudText>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Action" Style="text-align: center;">
+                                        @if (!string.IsNullOrEmpty(result.CertificatePath))
+                                        {
+                                            <MudTooltip Text="@($"Serial: {result.CertificateSerialNumber}")">
+                                                <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                              Size="Size.Small"
+                                                              Color="Color.Primary"
+                                                              OnClick="@(async () => await ViewCertificate(result))" />
+                                            </MudTooltip>
+                                        }
+                                        else if (result.ResultStatus == "Pass" && _canEditResults)
+                                        {
+                                            <MudButton Variant="Variant.Text"
+                                                      Color="Color.Primary"
+                                                      Size="Size.Small"
+                                                      StartIcon="@Icons.Material.Filled.Download"
+                                                      OnClick="@(() => GenerateCertificate(result.StaffId))">
+                                                Generate
+                                            </MudButton>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                    </div>
+                </MudTabPanel>
+            </MudTabs>
+        </MudPaper>
+    </MudContainer>
+}
+
+@code {
+    [Parameter]
+    public int CoursePlanId { get; set; }
+
+    private CourseDetailWithParticipantsDto? _courseDetail;
+    private List<StaffListDto> _availableStaff = new();
+    private IEnumerable<int> _selectedStaffIds = new List<int>();
+    private List<AttendanceGridDto> _attendanceGrid = new();
+    private List<CourseResultDto> _results = new();
+    private List<DateTime> _dateRange = new();
+
+    private bool _isLoading = true;
+    private bool _adding = false;
+    private bool _loadingAttendance = false;
+    private bool _loadingResults = false;
+    private bool _savingAttendance = false;
+    private bool _hasUnsavedChanges = false;
+    private HashSet<(int StaffId, DateTime Date)> _pendingChanges = new();
+    private int _activeTab = 0;
+    private int _tenantId;
+    private int _userId;
+    private int _accessLevel = 0;
+    private string _userRole = string.Empty;
+    private ClaimsPrincipal? _user;
+
+    // Trainers, Super Admins, and anyone with Course Management access (level >= 1) can mark attendance manually
+    private bool _canMarkAttendance => _userRole == "Super Admin" || _userRole == "Trainer" || _accessLevel >= 1;
+    // Trainers, Super Admins, and anyone with level >= 2 can enter/update results
+    private bool _canEditResults => _userRole == "Super Admin" || _userRole == "Trainer" || _accessLevel >= 2;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _user = authState.User;
+
+        if (_user?.Identity?.IsAuthenticated ?? false)
+        {
+            var userIdClaim = _user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var tenantIdClaim = _user.FindFirst("TenantId")?.Value;
+
+            if (int.TryParse(userIdClaim, out var userId))
+                _userId = userId;
+
+            if (int.TryParse(tenantIdClaim, out var tenantId))
+                _tenantId = tenantId;
+
+            _userRole = _user.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+        }
+
+        await LoadCourseData();
+        await LoadAvailableStaff();
+        _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Course Management", _tenantId);
+        // Pre-populate the attendance grid so the tab is ready without needing to click it first
+        await LoadAttendanceGrid();
+    }
+
+    private async Task LoadCourseData()
+    {
+        try
+        {
+            _isLoading = true;
+            _courseDetail = await ParticipantService.GetCourseWithParticipantsAsync(CoursePlanId, _tenantId);
+
+            if (_courseDetail != null)
+            {
+                // Generate date range
+                _dateRange = Enumerable.Range(0, (_courseDetail.EndDate.Date - _courseDetail.StartDate.Date).Days + 1)
+                    .Select(offset => _courseDetail.StartDate.Date.AddDays(offset))
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading course data for CoursePlanId: {CoursePlanId}", CoursePlanId);
+            Snackbar.Add("Error loading course data", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadAvailableStaff()
+    {
+        try
+        {
+            var pagedResult = await StaffService.GetPagedAsync(_tenantId, 1, 1000, null, null, null);
+
+            // Filter out staff that are already participants
+            var existingParticipantIds = _courseDetail?.Participants?.Select(p => p.StaffId).ToHashSet() ?? new HashSet<int>();
+            _availableStaff = pagedResult.Items
+                .Where(s => !existingParticipantIds.Contains(s.StaffId))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading available staff");
+            Snackbar.Add("Error loading staff list", Severity.Error);
+        }
+    }
+
+    private async Task AddParticipants()
+    {
+        try
+        {
+            _adding = true;
+
+            var request = new AddCourseParticipantRequest
+            {
+                CoursePlanId = CoursePlanId,
+                StaffIds = _selectedStaffIds.ToList()
+            };
+
+            var success = await ParticipantService.AddParticipantsAsync(request, _tenantId, _userId);
+
+            if (success)
+            {
+                Snackbar.Add("Participants added successfully", Severity.Success);
+                _selectedStaffIds = new List<int>();
+                await LoadCourseData();
+                await LoadAvailableStaff();
+                await LoadAttendanceGrid();
+            }
+            else
+            {
+                Snackbar.Add("Failed to add participants", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error adding participants");
+            Snackbar.Add("Error adding participants", Severity.Error);
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+
+    private async Task RemoveParticipant(int staffId)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Remove",
+            "Are you sure you want to remove this participant?",
+            yesText: "Remove", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                var success = await ParticipantService.RemoveParticipantAsync(CoursePlanId, staffId, _tenantId, _userId);
+
+                if (success)
+                {
+                    Snackbar.Add("Participant removed successfully", Severity.Success);
+                    await LoadCourseData();
+                    await LoadAvailableStaff();
+                    await LoadAttendanceGrid();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to remove participant", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error removing participant");
+                Snackbar.Add("Error removing participant", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OnTabChanged(int newIndex)
+    {
+        _activeTab = newIndex;
+
+        // Reload data when switching tabs
+        if (newIndex == 1)
+        {
+            await LoadAttendanceGrid();
+        }
+        else if (newIndex == 2)
+        {
+            await LoadResults();
+        }
+    }
+
+    private async Task LoadAttendanceGrid()
+    {
+        try
+        {
+            _loadingAttendance = true;
+            StateHasChanged();
+
+            _attendanceGrid = (await ParticipantService.GetAttendanceGridAsync(CoursePlanId, _tenantId)).ToList();
+
+            // If the service returned nothing but participants are already loaded,
+            // build a blank grid so the trainer can start marking attendance immediately.
+            if (!_attendanceGrid.Any() && _courseDetail?.Participants.Any() == true)
+            {
+                _attendanceGrid = _courseDetail.Participants.Select(p => new AttendanceGridDto
+                {
+                    StaffId = p.StaffId,
+                    StaffName = p.StaffName,
+                    EmployeeCode = p.EmployeeCode,
+                    AttendanceByDate = _dateRange.ToDictionary(d => d.Date, _ => false),
+                    TotalDays = _dateRange.Count,
+                    PresentDays = 0,
+                    AttendancePercentage = 0
+                }).ToList();
+            }
+
+            // Reset pending changes when loading fresh data
+            _pendingChanges.Clear();
+            _hasUnsavedChanges = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading attendance grid");
+            Snackbar.Add("Error loading attendance data", Severity.Error);
+        }
+        finally
+        {
+            _loadingAttendance = false;
+        }
+    }
+
+    private void UpdateAttendance(int staffId, DateTime date, bool isPresent)
+    {
+        // Update local grid immediately for responsive UI
+        var participant = _attendanceGrid.FirstOrDefault(p => p.StaffId == staffId);
+        if (participant != null)
+        {
+            participant.AttendanceByDate[date] = isPresent;
+            participant.PresentDays = participant.AttendanceByDate.Count(kvp => kvp.Value);
+            participant.AttendancePercentage = participant.TotalDays > 0
+                ? Math.Round((decimal)participant.PresentDays / participant.TotalDays * 100, 2)
+                : 0;
+
+            // Track pending changes
+            _pendingChanges.Add((staffId, date));
+            _hasUnsavedChanges = true;
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveCurrentAttendance()
+    {
+        if (!_attendanceGrid.Any() || !_dateRange.Any())
+        {
+            Snackbar.Add("No attendance data to save", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _savingAttendance = true;
+            StateHasChanged();
+
+            var successCount = 0;
+            var failCount = 0;
+
+            // Save all current attendance states for each date
+            foreach (var date in _dateRange)
+            {
+                var attendanceItems = _attendanceGrid
+                    .Select(p => new AttendanceItemRequest
+                    {
+                        StaffId = p.StaffId,
+                        IsPresent = p.AttendanceByDate.GetValueOrDefault(date, false),
+                        Remarks = null
+                    })
+                    .ToList();
+
+                var bulkRequest = new BulkAttendanceDateWiseRequest
+                {
+                    CoursePlanId = CoursePlanId,
+                    AttendanceDate = date,
+                    AttendanceItems = attendanceItems
+                };
+
+                var result = await ParticipantService.BulkMarkAttendanceDateWiseSpAsync(bulkRequest, _tenantId, _userId);
+
+                if (result.Success)
+                {
+                    successCount += attendanceItems.Count;
+                }
+                else
+                {
+                    failCount += attendanceItems.Count;
+                    Logger.LogWarning("Failed to save attendance for date {Date}: {Message}", date, result.Message);
+                }
+            }
+
+            if (failCount == 0)
+            {
+                Snackbar.Add($"Attendance saved successfully", Severity.Success);
+                _pendingChanges.Clear();
+                _hasUnsavedChanges = false;
+                // Reload to reflect actual saved data
+                await LoadAttendanceGrid();
+            }
+            else if (successCount > 0)
+            {
+                Snackbar.Add($"Partially saved: some records failed", Severity.Warning);
+                await LoadAttendanceGrid();
+            }
+            else
+            {
+                Snackbar.Add("Failed to save attendance. Please check the logs for details.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving attendance");
+            Snackbar.Add("Error saving attendance", Severity.Error);
+        }
+        finally
+        {
+            _savingAttendance = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveAllAttendance()
+    {
+        // Redirect to SaveCurrentAttendance which saves all current states
+        await SaveCurrentAttendance();
+    }
+
+    private async Task LoadResults()
+    {
+        try
+        {
+            _loadingResults = true;
+            _results = (await ParticipantService.GetResultSummaryAsync(CoursePlanId, _tenantId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading results");
+            Snackbar.Add("Error loading results", Severity.Error);
+        }
+        finally
+        {
+            _loadingResults = false;
+        }
+    }
+
+    private async Task UpdateResult(int staffId, string? resultStatus)
+    {
+        if (string.IsNullOrEmpty(resultStatus))
+            return;
+
+        try
+        {
+            var request = new UpdateResultRequest
+            {
+                CoursePlanId = CoursePlanId,
+                StaffId = staffId,
+                ResultStatus = resultStatus
+            };
+
+            var success = await ParticipantService.UpdateResultAsync(request, _tenantId, _userId);
+
+            if (success)
+            {
+                Snackbar.Add($"Result updated to {resultStatus}", Severity.Success);
+                await LoadResults();
+            }
+            else
+            {
+                Snackbar.Add("Failed to update result", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating result");
+            Snackbar.Add("Error updating result", Severity.Error);
+        }
+    }
+
+    private async Task GenerateCertificate(int staffId)
+    {
+        try
+        {
+            var certificatePath = await ParticipantService.GenerateCertificateAsync(CoursePlanId, staffId, _tenantId, _userId);
+
+            if (!string.IsNullOrEmpty(certificatePath))
+            {
+                Snackbar.Add("Certificate generated successfully", Severity.Success);
+                await LoadResults();
+            }
+            else
+            {
+                Snackbar.Add("Failed to generate certificate", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating certificate");
+            Snackbar.Add("Error generating certificate", Severity.Error);
+        }
+    }
+
+    private async Task UpdateMarks(int staffId, decimal? marks)
+    {
+        try
+        {
+            var success = await ParticipantService.UpdateMarksAsync(CoursePlanId, staffId, marks, _tenantId, _userId);
+
+            if (success)
+            {
+                // Update local result
+                var result = _results.FirstOrDefault(r => r.StaffId == staffId);
+                if (result != null)
+                {
+                    result.Marks = marks;
+                }
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add("Failed to update marks", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating marks");
+            Snackbar.Add("Error updating marks", Severity.Error);
+        }
+    }
+
+    private async Task UpdateResultStatus(int staffId, bool isPassed)
+    {
+        try
+        {
+            var resultStatus = isPassed ? "Pass" : "Fail";
+            var currentResult = _results.FirstOrDefault(r => r.StaffId == staffId);
+
+            var request = new UpdateResultRequest
+            {
+                CoursePlanId = CoursePlanId,
+                StaffId = staffId,
+                Marks = currentResult?.Marks,
+                ResultStatus = resultStatus
+            };
+
+            var success = await ParticipantService.UpdateResultAsync(request, _tenantId, _userId);
+
+            if (success)
+            {
+                Snackbar.Add($"Result updated to {resultStatus}", Severity.Success);
+                await LoadResults();
+            }
+            else
+            {
+                Snackbar.Add("Failed to update result", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating result status");
+            Snackbar.Add("Error updating result status", Severity.Error);
+        }
+    }
+
+    private async Task ViewCertificate(CourseResultDto result)
+    {
+        if (!string.IsNullOrEmpty(result.CertificatePath))
+        {
+            try
+            {
+                // Open certificate in new tab using window.open
+                var certificateUrl = result.CertificatePath.StartsWith("/")
+                    ? result.CertificatePath
+                    : "/" + result.CertificatePath;
+                await JS.InvokeVoidAsync("window.open", certificateUrl, "_blank");
+                Snackbar.Add($"Opening certificate (Serial: {result.CertificateSerialNumber})", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error opening certificate");
+                Snackbar.Add("Error opening certificate", Severity.Error);
+            }
+        }
+    }
+
+    private bool IsCourseEnded()
+    {
+        if (_courseDetail == null)
+            return false;
+
+        return DateTime.Today > _courseDetail.EndDate;
+    }
+
+    private string GetStaffDisplayName(int staffId)
+    {
+        var staff = _availableStaff.FirstOrDefault(s => s.StaffId == staffId);
+        if (staff != null)
+        {
+            return $"{staff.Name} ({staff.EmployeeCode})";
+        }
+        // Check in existing participants as well
+        var participant = _courseDetail?.Participants?.FirstOrDefault(p => p.StaffId == staffId);
+        if (participant != null)
+        {
+            return $"{participant.StaffName} ({participant.EmployeeCode})";
+        }
+        return staffId.ToString();
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/tms/planning");
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+}
