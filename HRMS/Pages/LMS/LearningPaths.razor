@@ -1,0 +1,291 @@
+@page "/lms/learning-paths"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILearningPathService LearningPathService
+@inject ILmsCourseService LmsCourseService
+@inject IMasterDataService MasterDataService
+@inject ISnackbar Snackbar
+@inject ILogger<LearningPaths> Logger
+@inject IDialogService DialogService
+
+<PageTitle>Learning Paths</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h5" Style="font-weight:700;color:#1a237e;">
+                <MudIcon Icon="@Icons.Material.Filled.Route" Class="mr-2" Style="vertical-align:middle;" />
+                Learning Paths
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Curated course sequences for specific job roles</MudText>
+        </div>
+        @if (_canManage)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">
+                New Path
+            </MudButton>
+        }
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (!_paths.Any())
+    {
+        <MudPaper Elevation="0" Class="pa-8 text-center" Style="background:#f9f9f9;border-radius:12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Route" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">No learning paths yet</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudGrid Spacing="3">
+            @foreach (var path in _paths)
+            {
+                <MudItem xs="12" md="6">
+                    <MudCard Elevation="2" Style="border-radius:12px;">
+                        <MudCardHeader>
+                            <CardHeaderAvatar>
+                                <MudAvatar Color="Color.Primary">
+                                    <MudIcon Icon="@Icons.Material.Filled.Route" />
+                                </MudAvatar>
+                            </CardHeaderAvatar>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6" Style="font-weight:600;">@path.Title</MudText>
+                                @if (!string.IsNullOrEmpty(path.JobTitleName))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">
+                                        <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-1" />
+                                        @path.JobTitleName
+                                    </MudChip>
+                                }
+                            </CardHeaderContent>
+                            <CardHeaderActions>
+                                @if (_canManage)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   OnClick="@(() => OpenEditDialog(path))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                   Color="Color.Error" OnClick="@(() => ConfirmDelete(path))" />
+                                }
+                            </CardHeaderActions>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            @if (!string.IsNullOrEmpty(path.Description))
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">@path.Description</MudText>
+                            }
+                            @if (path.Courses.Any())
+                            {
+                                <MudText Typo="Typo.caption" Class="mb-2" Style="font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
+                                    @path.Courses.Count courses · @FormatDuration(path.Courses.Sum(c => c.DurationMinutes))
+                                </MudText>
+                                <div>
+                                    @foreach (var (c, i) in path.Courses.Select((c, i) => (c, i)))
+                                    {
+                                        <div class="d-flex align-center mb-1">
+                                            <MudAvatar Size="Size.Small" Style="background:#e8eaf6;color:#3949ab;font-size:12px;min-width:24px;width:24px;height:24px;margin-right:8px;">
+                                                @(i + 1)
+                                            </MudAvatar>
+                                            <MudText Typo="Typo.body2">@c.CourseTitle</MudText>
+                                            <MudSpacer />
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatDuration(c.DurationMinutes)</MudText>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">No courses added yet.</MudText>
+                            }
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+<!-- Create/Edit Dialog -->
+<MudDialog @bind-IsVisible="_showDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingPath == null ? "New Learning Path" : "Edit Learning Path")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_form.Title" Label="Path Title" Required="true" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_form.Description" Label="Description" Lines="2" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="int?" @bind-Value="_form.JobTitleId" Label="Target Job Title" Clearable="true">
+                    <MudSelectItem T="int?" Value="null">— All Roles —</MudSelectItem>
+                    @foreach (var jt in _jobTitles)
+                    {
+                        <MudSelectItem T="int?" Value="jt.MasterValueId">@jt.ValueName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Select Courses (in order)</MudText>
+                @foreach (var course in _allCourses)
+                {
+                    var selected = _selectedCourseIds.Contains(course.LmsCourseId);
+                    <div class="d-flex align-center mb-1 pa-2"
+                         style="border:1px solid @(selected ? "#3949ab" : "#e0e0e0");border-radius:8px;background:@(selected ? "#e8eaf6" : "transparent");cursor:pointer;"
+                         @onclick="@(() => ToggleCourse(course.LmsCourseId))">
+                        <MudCheckBox T="bool" Value="selected" ReadOnly="true" Color="Color.Primary" />
+                        <div>
+                            <MudText Typo="Typo.body2" Style="@($"font-weight:{(selected ? "600" : "400")};")">@course.Title</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(course.CourseTypeName ?? "") · @FormatDuration(course.DurationMinutes)</MudText>
+                        </div>
+                        @if (selected)
+                        {
+                            <MudSpacer />
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">
+                                #@(_selectedCourseIds.IndexOf(course.LmsCourseId) + 1)
+                            </MudChip>
+                        }
+                    </div>
+                }
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showDialog = false)">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SavePath" Disabled="_isSaving">
+            @if (_isSaving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private int _tenantId;
+    private string _userId = string.Empty;
+    private string _userRole = string.Empty;
+    private bool _isLoading = true;
+    private bool _canManage;
+
+    private List<LearningPathDto> _paths = new();
+    private List<LmsCourseDto> _allCourses = new();
+    private List<MasterValueDto> _jobTitles = new();
+
+    private bool _showDialog;
+    private bool _isSaving;
+    private LearningPathDto? _editingPath;
+    private PathFormModel _form = new();
+    private List<int> _selectedCourseIds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        _userId   = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0";
+        _tenantId = int.TryParse(user.FindFirstValue("TenantId"), out var tid) ? tid : 1;
+        _userRole = user.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        _canManage = _userRole is "Super Admin" or "IT Admin" or "HR Admin";
+
+        await Task.WhenAll(LoadPaths(), LoadSupportData());
+    }
+
+    private async Task LoadPaths()
+    {
+        _isLoading = true;
+        try { _paths = (await LearningPathService.GetAllAsync(_tenantId)).ToList(); }
+        catch (Exception ex) { Logger.LogError(ex, "Error loading learning paths"); }
+        finally { _isLoading = false; }
+    }
+
+    private async Task LoadSupportData()
+    {
+        _allCourses = (await LmsCourseService.GetAllAsync(_tenantId)).ToList();
+        _jobTitles  = (await MasterDataService.GetValuesByCategoryCodeAsync("JobTitle", _tenantId)).ToList();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingPath = null;
+        _form = new PathFormModel();
+        _selectedCourseIds = new();
+        _showDialog = true;
+    }
+
+    private void OpenEditDialog(LearningPathDto path)
+    {
+        _editingPath = path;
+        _form = new PathFormModel { Title = path.Title, Description = path.Description, JobTitleId = path.JobTitleId };
+        _selectedCourseIds = path.Courses.OrderBy(c => c.SortOrder).Select(c => c.LmsCourseId).ToList();
+        _showDialog = true;
+    }
+
+    private void ToggleCourse(int courseId)
+    {
+        if (_selectedCourseIds.Contains(courseId))
+            _selectedCourseIds.Remove(courseId);
+        else
+            _selectedCourseIds.Add(courseId);
+    }
+
+    private async Task SavePath()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Title)) { Snackbar.Add("Title is required.", Severity.Warning); return; }
+        _isSaving = true;
+        try
+        {
+            var req = new CreateLearningPathRequest
+            {
+                TenantId = _tenantId, Title = _form.Title, Description = _form.Description,
+                JobTitleId = _form.JobTitleId, CourseIds = _selectedCourseIds, CreatedBy = _userId
+            };
+
+            bool success; string message;
+            if (_editingPath == null)
+            {
+                var r = await LearningPathService.CreateAsync(req);
+                success = r.Success; message = r.Message;
+            }
+            else
+            {
+                var r = await LearningPathService.UpdateAsync(_editingPath.LearningPathId, req);
+                success = r.Success; message = r.Message;
+            }
+            Snackbar.Add(message, success ? Severity.Success : Severity.Error);
+            if (success) { _showDialog = false; await LoadPaths(); }
+        }
+        finally { _isSaving = false; }
+    }
+
+    private async Task ConfirmDelete(LearningPathDto path)
+    {
+        var result = await DialogService.ShowMessageBox("Delete Path", $"Delete '{path.Title}'?",
+            yesText: "Delete", cancelText: "Cancel");
+        if (result == true)
+        {
+            var r = await LearningPathService.DeleteAsync(path.LearningPathId, _tenantId, _userId);
+            Snackbar.Add(r.Message, r.Success ? Severity.Success : Severity.Error);
+            if (r.Success) await LoadPaths();
+        }
+    }
+
+    private static string FormatDuration(int minutes) =>
+        minutes >= 60 ? $"{minutes / 60}h {minutes % 60}m" : $"{minutes}m";
+
+    public void Dispose() { }
+
+    private class PathFormModel
+    {
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int? JobTitleId { get; set; }
+    }
+}

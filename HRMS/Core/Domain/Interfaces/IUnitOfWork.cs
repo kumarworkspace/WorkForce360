@@ -23,6 +23,15 @@ public interface IUnitOfWork : IDisposable
     ICourseParticipantRepository CourseParticipant { get; }
     ICourseAttendanceDateWiseRepository CourseAttendanceDateWise { get; }
     ICourseResultRepository CourseResult { get; }
+    IMenuGroupRepository MenuGroup { get; }
+    IMenuItemRepository MenuItem { get; }
+    IMasterCategoryRepository MasterCategory { get; }
+    IMasterValueRepository MasterValue { get; }
+    ILmsCourseRepository LmsCourse { get; }
+    ILmsModuleRepository LmsModule { get; }
+    ILearningPathRepository LearningPath { get; }
+    IEnrollmentRepository Enrollment { get; }
+    IProgressTrackingRepository ProgressTracking { get; }
 
     Task<int> SaveChangesAsync();
     Task BeginTransactionAsync();

@@ -60,7 +60,16 @@ public class UnitOfWorkFactory : IUnitOfWorkFactory
                 new CourseAttendanceRepository(context),
                 new CourseParticipantRepository(context),
                 new CourseAttendanceDateWiseRepository(context),
-                new CourseResultRepository(context));
+                new CourseResultRepository(context),
+                new MenuGroupRepository(context),
+                new MenuItemRepository(context),
+                new MasterCategoryRepository(context),
+                new MasterValueRepository(context),
+                new LmsCourseRepository(context),
+                new LmsModuleRepository(context),
+                new LearningPathRepository(context),
+                new EnrollmentRepository(context),
+                new ProgressTrackingRepository(context));
         }
 
     public void Dispose()

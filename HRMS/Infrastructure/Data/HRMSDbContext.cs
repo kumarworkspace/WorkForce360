@@ -36,6 +36,16 @@ public class HRMSDbContext : DbContext
     public DbSet<CourseParticipant> CourseParticipants { get; set; }
     public DbSet<CourseAttendanceDateWise> CourseAttendancesDateWise { get; set; }
     public DbSet<CourseResult> CourseResults { get; set; }
+    public DbSet<MenuGroup> MenuGroups { get; set; }
+    public DbSet<MenuItem> MenuItems { get; set; }
+    public DbSet<MasterCategory> MasterCategories { get; set; }
+    public DbSet<MasterValue> MasterValues { get; set; }
+    public DbSet<LmsCourse> LmsCourses { get; set; }
+    public DbSet<LmsModule> LmsModules { get; set; }
+    public DbSet<LearningPath> LearningPaths { get; set; }
+    public DbSet<LearningPathCourse> LearningPathCourses { get; set; }
+    public DbSet<Enrollment> Enrollments { get; set; }
+    public DbSet<ProgressTracking> ProgressTrackings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,6 +74,16 @@ public class HRMSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new CourseParticipantConfiguration());
         modelBuilder.ApplyConfiguration(new CourseAttendanceDateWiseConfiguration());
         modelBuilder.ApplyConfiguration(new CourseResultConfiguration());
+        modelBuilder.ApplyConfiguration(new MenuGroupConfiguration());
+        modelBuilder.ApplyConfiguration(new MenuItemConfiguration());
+        modelBuilder.ApplyConfiguration(new MasterCategoryConfiguration());
+        modelBuilder.ApplyConfiguration(new MasterValueConfiguration());
+        modelBuilder.ApplyConfiguration(new LmsCourseConfiguration());
+        modelBuilder.ApplyConfiguration(new LmsModuleConfiguration());
+        modelBuilder.ApplyConfiguration(new LearningPathConfiguration());
+        modelBuilder.ApplyConfiguration(new LearningPathCourseConfiguration());
+        modelBuilder.ApplyConfiguration(new EnrollmentConfiguration());
+        modelBuilder.ApplyConfiguration(new ProgressTrackingConfiguration());
 
         // Configure keyless entities for stored procedure results
         modelBuilder.Entity<MarkAttendanceResponse>().HasNoKey().ToView(null);

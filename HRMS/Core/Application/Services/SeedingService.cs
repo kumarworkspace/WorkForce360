@@ -25,6 +25,13 @@ public class SeedingService : ISeedingService
         "Role Management",       // /admin/users, /admin/roles
         "Access Control",        // /admin/access-control, /admin/user-roles
         "Audit Logs",            // /admin/audit-logs
+        "Menu Management",       // /admin/menu-management
+        "Master Data",           // /admin/master-data
+        "LMS Courses",           // /lms/courses, /lms/my-courses
+        "LMS Assessments",       // /lms/assessments
+        "LMS Certificates",      // /lms/certificates
+        "Learning Paths",        // /lms/learning-paths
+        "Talent Pipeline",       // /talent/candidates, /talent/job-postings
     ];
 
     // Default access matrix — keyed by role name (case-insensitive).
@@ -48,6 +55,13 @@ public class SeedingService : ISeedingService
                 { "Role Management",      2 },
                 { "Access Control",       0 },
                 { "Audit Logs",           1 },
+                { "Menu Management",      2 },
+                { "Master Data",          3 },
+                { "LMS Courses",          2 },
+                { "LMS Assessments",      1 },
+                { "LMS Certificates",     1 },
+                { "Learning Paths",       2 },
+                { "Talent Pipeline",      2 },
             },
             ["Manager"] = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
@@ -61,6 +75,13 @@ public class SeedingService : ISeedingService
                 { "Role Management",      0 },
                 { "Access Control",       0 },
                 { "Audit Logs",           0 },
+                { "Menu Management",      0 },
+                { "Master Data",          0 },
+                { "LMS Courses",          1 },
+                { "LMS Assessments",      1 },
+                { "LMS Certificates",     1 },
+                { "Learning Paths",       1 },
+                { "Talent Pipeline",      2 },
             },
             ["Trainer"] = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
@@ -74,6 +95,13 @@ public class SeedingService : ISeedingService
                 { "Role Management",      0 },
                 { "Access Control",       0 },
                 { "Audit Logs",           0 },
+                { "Menu Management",      0 },
+                { "Master Data",          1 },
+                { "LMS Courses",          3 },
+                { "LMS Assessments",      3 },
+                { "LMS Certificates",     2 },
+                { "Learning Paths",       2 },
+                { "Talent Pipeline",      0 },
             },
             ["Staff"] = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
@@ -87,6 +115,13 @@ public class SeedingService : ISeedingService
                 { "Role Management",      0 },
                 { "Access Control",       0 },
                 { "Audit Logs",           0 },
+                { "Menu Management",      0 },
+                { "Master Data",          0 },
+                { "LMS Courses",          1 },
+                { "LMS Assessments",      1 },
+                { "LMS Certificates",     1 },
+                { "Learning Paths",       1 },
+                { "Talent Pipeline",      0 },
             },
         };
 

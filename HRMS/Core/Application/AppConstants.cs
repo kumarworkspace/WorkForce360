@@ -30,5 +30,12 @@ public static class AppConstants
         public const string RoleManagement      = "Role Management";
         public const string AccessControl       = "Access Control";
         public const string AuditLogs           = "Audit Logs";
+        public const string MenuManagement      = "Menu Management";
+        public const string MasterData          = "Master Data";
+        public const string LmsCourses          = "LMS Courses";
+        public const string LmsAssessments      = "LMS Assessments";
+        public const string LmsCertificates     = "LMS Certificates";
+        public const string LearningPaths       = "Learning Paths";
+        public const string TalentPipeline      = "Talent Pipeline";
     }
 }

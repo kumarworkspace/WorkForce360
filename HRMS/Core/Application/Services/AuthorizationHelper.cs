@@ -61,6 +61,21 @@ public class AuthorizationHelper : IAuthorizationHelper
         { "/admin/access-control",       "Access Control" },
         { "/admin/user-roles",           "Access Control" },
         { "/admin/audit-logs",           "Audit Logs" },
+        { "/admin/menu-management",      "Menu Management" },
+        { "/admin/master-data",          "Master Data" },
+
+        // LMS
+        { "/lms/courses",                "LMS Courses" },
+        { "/lms/my-courses",             "LMS Courses" },
+        { "/lms/assessments",            "LMS Assessments" },
+        { "/lms/certificates",           "LMS Certificates" },
+        { "/lms/learning-paths",         "Learning Paths" },
+        { "/lms/ai-tutor",               "LMS Courses" },
+
+        // Talent Pipeline
+        { "/talent/candidates",          "Talent Pipeline" },
+        { "/talent/job-postings",        "Talent Pipeline" },
+        { "/talent/applications",        "Talent Pipeline" },
     };
 
     public AuthorizationHelper(

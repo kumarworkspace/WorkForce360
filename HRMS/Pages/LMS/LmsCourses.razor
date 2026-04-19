@@ -1,0 +1,397 @@
+@page "/lms/courses"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILmsCourseService LmsCourseService
+@inject IMasterDataService MasterDataService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject ILogger<LmsCourses> Logger
+@inject IDialogService DialogService
+
+<PageTitle>LMS Courses</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h5" Style="font-weight:700;color:#1a237e;">
+                <MudIcon Icon="@Icons.Material.Filled.MenuBook" Class="mr-2" Style="vertical-align:middle;" />
+                LMS Courses
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Manage learning courses for your organisation</MudText>
+        </div>
+        @if (_canCreate)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">
+                New Course
+            </MudButton>
+        }
+    </div>
+
+    <!-- Filter bar -->
+    <MudPaper Elevation="1" Class="pa-3 mb-4" Style="border-radius:12px;">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="5">
+                <MudTextField @bind-Value="_search" Label="Search by title or tags" Immediate="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" OnClearButtonClick="@(() => { _search = string.Empty; ApplyFilter(); })"
+                              TextChanged="@(v => { _search = v; ApplyFilter(); })" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="int?" @bind-Value="_filterCourseTypeId" Label="Course Type" Clearable="true">
+                    <MudSelectItem T="int?" Value="null">All Types</MudSelectItem>
+                    @foreach (var ct in _courseTypes)
+                    {
+                        <MudSelectItem T="int?" Value="ct.MasterValueId">@ct.ValueName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="int?" @bind-Value="_filterDifficultyId" Label="Difficulty" Clearable="true">
+                    <MudSelectItem T="int?" Value="null">All Levels</MudSelectItem>
+                    @foreach (var d in _difficulties)
+                    {
+                        <MudSelectItem T="int?" Value="d.MasterValueId">@d.ValueName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="1" Class="d-flex align-center">
+                <MudButton Variant="Variant.Outlined" OnClick="ApplyFilter" StartIcon="@Icons.Material.Filled.FilterAlt">
+                    Filter
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    else if (!_filtered.Any())
+    {
+        <MudPaper Elevation="0" Class="pa-8 text-center" Style="background:#f9f9f9;border-radius:12px;">
+            <MudIcon Icon="@Icons.Material.Filled.LibraryBooks" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">No courses found</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @(_canCreate ? "Click 'New Course' to create your first course." : "No courses available yet.")
+            </MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudGrid Spacing="3">
+            @foreach (var course in _filtered)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="2" Style="border-radius:12px;height:100%;display:flex;flex-direction:column;">
+                        @if (!string.IsNullOrEmpty(course.ThumbnailPath))
+                        {
+                            <MudCardMedia Image="@course.ThumbnailPath" Height="150" />
+                        }
+                        else
+                        {
+                            <div style="height:100px;background:linear-gradient(135deg,#1a237e,#3949ab);display:flex;align-items:center;justify-content:center;border-radius:12px 12px 0 0;">
+                                <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="color:white;font-size:48px;" />
+                            </div>
+                        }
+                        <MudCardContent Style="flex:1;">
+                            <div class="d-flex align-center justify-space-between mb-1">
+                                <MudText Typo="Typo.h6" Style="font-weight:600;line-height:1.2;">@course.Title</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="@GetDifficultyColor(course.DifficultyName)">
+                                    @(course.DifficultyName ?? "—")
+                                </MudChip>
+                            </div>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2"
+                                     Style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
+                                @(course.Description ?? "No description provided.")
+                            </MudText>
+                            <div class="d-flex gap-2 flex-wrap">
+                                @if (!string.IsNullOrEmpty(course.CourseTypeName))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">
+                                        @course.CourseTypeName
+                                    </MudChip>
+                                }
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                                    @FormatDuration(course.DurationMinutes)
+                                </MudChip>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                    <MudIcon Icon="@Icons.Material.Filled.ViewModule" Size="Size.Small" Class="mr-1" />
+                                    @course.ModuleCount modules
+                                </MudChip>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success">
+                                    <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Small" Class="mr-1" />
+                                    @course.EnrollmentCount enrolled
+                                </MudChip>
+                            </div>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                       OnClick="@(() => ViewCourse(course.LmsCourseId))">
+                                View
+                            </MudButton>
+                            @if (_canEdit)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary"
+                                           OnClick="@(() => OpenEditDialog(course))">
+                                    Edit
+                                </MudButton>
+                            }
+                            @if (_canDelete)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                           OnClick="@(() => ConfirmDelete(course))">
+                                    Delete
+                                </MudButton>
+                            }
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+<!-- Create/Edit Dialog -->
+<MudDialog @bind-IsVisible="_showDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingCourse == null ? "New Course" : "Edit Course")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_form.Title" Label="Course Title" Required="true"
+                              Immediate="true" HelperText="Clear, descriptive title" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_form.Description" Label="Description" Lines="3"
+                              Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="int?" @bind-Value="_form.CourseTypeId" Label="Course Type" Clearable="true">
+                    <MudSelectItem T="int?" Value="null">— Select —</MudSelectItem>
+                    @foreach (var ct in _courseTypes)
+                    {
+                        <MudSelectItem T="int?" Value="ct.MasterValueId">@ct.ValueName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="int?" @bind-Value="_form.DifficultyId" Label="Difficulty" Clearable="true">
+                    <MudSelectItem T="int?" Value="null">— Select —</MudSelectItem>
+                    @foreach (var d in _difficulties)
+                    {
+                        <MudSelectItem T="int?" Value="d.MasterValueId">@d.ValueName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_form.ContentUrl" Label="Content URL" Immediate="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int" @bind-Value="_form.DurationMinutes" Label="Duration (min)"
+                                 Min="0" Max="9999" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_form.Tags" Label="Tags (comma separated)" Immediate="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Label" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_form.Objectives" Label="Learning Objectives" Lines="3"
+                              Immediate="true" Placeholder="What will learners achieve?" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showDialog = false)" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveCourse"
+                   Disabled="_isSaving">
+            @if (_isSaving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            @(_editingCourse == null ? "Create" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private int _tenantId;
+    private string _userId = string.Empty;
+    private string _userRole = string.Empty;
+    private bool _isLoading = true;
+    private bool _canCreate, _canEdit, _canDelete;
+
+    private List<LmsCourseDto> _courses = new();
+    private List<LmsCourseDto> _filtered = new();
+    private List<MasterValueDto> _courseTypes = new();
+    private List<MasterValueDto> _difficulties = new();
+
+    private string _search = string.Empty;
+    private int? _filterCourseTypeId;
+    private int? _filterDifficultyId;
+
+    private bool _showDialog;
+    private bool _isSaving;
+    private LmsCourseDto? _editingCourse;
+    private CourseFormModel _form = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        _userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0";
+        _tenantId = int.TryParse(user.FindFirstValue("TenantId"), out var tid) ? tid : 1;
+        _userRole = user.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+        _canCreate = _userRole is "Super Admin" or "IT Admin" or "HR Admin" or "Trainer";
+        _canEdit   = _canCreate;
+        _canDelete = _userRole is "Super Admin" or "IT Admin";
+
+        await LoadDropdowns();
+        await LoadCourses();
+    }
+
+    private async Task LoadDropdowns()
+    {
+        _courseTypes  = (await MasterDataService.GetValuesByCategoryCodeAsync("CourseType", _tenantId)).ToList();
+        _difficulties = (await MasterDataService.GetValuesByCategoryCodeAsync("DifficultyLevel", _tenantId)).ToList();
+    }
+
+    private async Task LoadCourses()
+    {
+        _isLoading = true;
+        try
+        {
+            _courses = (await LmsCourseService.GetAllAsync(_tenantId)).ToList();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading LMS courses");
+            Snackbar.Add("Failed to load courses.", Severity.Error);
+        }
+        finally { _isLoading = false; }
+    }
+
+    private void ApplyFilter()
+    {
+        _filtered = _courses
+            .Where(c =>
+                (string.IsNullOrWhiteSpace(_search) ||
+                 c.Title.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                 (c.Tags ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase)) &&
+                (_filterCourseTypeId == null || c.CourseTypeId == _filterCourseTypeId) &&
+                (_filterDifficultyId == null || c.DifficultyId == _filterDifficultyId))
+            .ToList();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingCourse = null;
+        _form = new CourseFormModel();
+        _showDialog = true;
+    }
+
+    private void OpenEditDialog(LmsCourseDto course)
+    {
+        _editingCourse = course;
+        _form = new CourseFormModel
+        {
+            Title           = course.Title,
+            Description     = course.Description,
+            CourseTypeId    = course.CourseTypeId,
+            DifficultyId    = course.DifficultyId,
+            ContentUrl      = course.ContentUrl,
+            DurationMinutes = course.DurationMinutes,
+            Tags            = course.Tags,
+            Objectives      = course.Objectives
+        };
+        _showDialog = true;
+    }
+
+    private async Task SaveCourse()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Title)) { Snackbar.Add("Title is required.", Severity.Warning); return; }
+        _isSaving = true;
+        try
+        {
+            bool success;
+            string message;
+            if (_editingCourse == null)
+            {
+                var req = new CreateLmsCourseRequest
+                {
+                    TenantId = _tenantId, Title = _form.Title, Description = _form.Description,
+                    CourseTypeId = _form.CourseTypeId, DifficultyId = _form.DifficultyId,
+                    ContentUrl = _form.ContentUrl, DurationMinutes = _form.DurationMinutes,
+                    Tags = _form.Tags, Objectives = _form.Objectives, CreatedBy = _userId
+                };
+                var result = await LmsCourseService.CreateAsync(req);
+                success = result.Success; message = result.Message;
+            }
+            else
+            {
+                var req = new UpdateLmsCourseRequest
+                {
+                    LmsCourseId = _editingCourse.LmsCourseId, TenantId = _tenantId,
+                    Title = _form.Title, Description = _form.Description,
+                    CourseTypeId = _form.CourseTypeId, DifficultyId = _form.DifficultyId,
+                    ContentUrl = _form.ContentUrl, DurationMinutes = _form.DurationMinutes,
+                    Tags = _form.Tags, Objectives = _form.Objectives,
+                    CreatedBy = _userId, UpdatedBy = _userId
+                };
+                var result = await LmsCourseService.UpdateAsync(req);
+                success = result.Success; message = result.Message;
+            }
+            Snackbar.Add(message, success ? Severity.Success : Severity.Error);
+            if (success) { _showDialog = false; await LoadCourses(); }
+        }
+        finally { _isSaving = false; }
+    }
+
+    private async Task ConfirmDelete(LmsCourseDto course)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Delete Course",
+            $"Delete '{course.Title}'? This will also remove its modules.",
+            yesText: "Delete", cancelText: "Cancel");
+        if (result == true)
+        {
+            var r = await LmsCourseService.DeleteAsync(course.LmsCourseId, _tenantId, _userId);
+            Snackbar.Add(r.Message, r.Success ? Severity.Success : Severity.Error);
+            if (r.Success) await LoadCourses();
+        }
+    }
+
+    private void ViewCourse(int courseId) => Navigation.NavigateTo($"/lms/courses/{courseId}");
+
+    private static Color GetDifficultyColor(string? difficulty) => difficulty?.ToLower() switch
+    {
+        "beginner"     => Color.Success,
+        "intermediate" => Color.Warning,
+        "advanced"     => Color.Error,
+        _              => Color.Default
+    };
+
+    private static string FormatDuration(int minutes) =>
+        minutes >= 60 ? $"{minutes / 60}h {minutes % 60}m" : $"{minutes}m";
+
+    public void Dispose() { }
+
+    private class CourseFormModel
+    {
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int? CourseTypeId { get; set; }
+        public int? DifficultyId { get; set; }
+        public string? ContentUrl { get; set; }
+        public int DurationMinutes { get; set; }
+        public string? Tags { get; set; }
+        public string? Objectives { get; set; }
+    }
+}

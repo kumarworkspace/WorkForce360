@@ -3,6 +3,7 @@ using System;
 using HRMS.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HRMS.Migrations
 {
     [DbContext(typeof(HRMSDbContext))]
-    partial class HRMSDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260419005730_Phase1_MenuAndMasterData")]
+    partial class Phase1_MenuAndMasterData
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1668,73 +1671,6 @@ namespace HRMS.Migrations
                     b.ToTable("EducationDetails", (string)null);
                 });
 
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.Enrollment", b =>
-                {
-                    b.Property<int>("EnrollmentId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("EnrollmentId"));
-
-                    b.Property<DateTime?>("CompletedDate")
-                        .HasColumnType("timestamp");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.Property<DateTime>("EnrolledDate")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<int>("LmsCourseId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("StaffId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Enrolled");
-
-                    b.Property<int>("TenantId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("timestamp");
-
-                    b.HasKey("EnrollmentId");
-
-                    b.HasIndex("LmsCourseId");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("StaffId", "TenantId");
-
-                    b.HasIndex("StaffId", "LmsCourseId", "TenantId")
-                        .IsUnique();
-
-                    b.ToTable("Enrollments", (string)null);
-                });
-
             modelBuilder.Entity("HRMS.Core.Domain.Entities.ExperienceDetail", b =>
                 {
                     b.Property<int>("Id")
@@ -1849,90 +1785,6 @@ namespace HRMS.Migrations
                         .IsUnique();
 
                     b.ToTable("HolidayMaster", (string)null);
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LearningPath", b =>
-                {
-                    b.Property<int>("LearningPathId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("LearningPathId"));
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<int?>("JobTitleId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TenantId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("timestamp");
-
-                    b.HasKey("LearningPathId");
-
-                    b.HasIndex("JobTitleId");
-
-                    b.HasIndex("TenantId", "IsActive");
-
-                    b.ToTable("LearningPaths", (string)null);
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LearningPathCourse", b =>
-                {
-                    b.Property<int>("LearningPathCourseId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("LearningPathCourseId"));
-
-                    b.Property<int>("LearningPathId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LmsCourseId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SortOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<int>("TenantId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("LearningPathCourseId");
-
-                    b.HasIndex("LmsCourseId");
-
-                    b.HasIndex("LearningPathId", "LmsCourseId")
-                        .IsUnique();
-
-                    b.ToTable("LearningPathCourses", (string)null);
                 });
 
             modelBuilder.Entity("HRMS.Core.Domain.Entities.LeaveBalance", b =>
@@ -2239,151 +2091,6 @@ namespace HRMS.Migrations
                     b.HasIndex("StaffId");
 
                     b.ToTable("LegalDocuments", (string)null);
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LmsCourse", b =>
-                {
-                    b.Property<int>("LmsCourseId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("LmsCourseId"));
-
-                    b.Property<string>("ContentUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int?>("CourseTypeId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("DifficultyId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("DurationMinutes")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Objectives")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Tags")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("TenantId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ThumbnailPath")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("timestamp");
-
-                    b.HasKey("LmsCourseId");
-
-                    b.HasIndex("CourseTypeId");
-
-                    b.HasIndex("DifficultyId");
-
-                    b.HasIndex("TenantId", "IsActive");
-
-                    b.ToTable("LmsCourses", (string)null);
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LmsModule", b =>
-                {
-                    b.Property<int>("LmsModuleId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("LmsModuleId"));
-
-                    b.Property<string>("ContentType")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ContentUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<int>("DurationMinutes")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<int>("LmsCourseId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SortOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<int>("TenantId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("timestamp");
-
-                    b.HasKey("LmsModuleId");
-
-                    b.HasIndex("LmsCourseId", "SortOrder");
-
-                    b.ToTable("LmsModules", (string)null);
                 });
 
             modelBuilder.Entity("HRMS.Core.Domain.Entities.MasterCategory", b =>
@@ -2738,67 +2445,6 @@ namespace HRMS.Migrations
                         .IsUnique();
 
                     b.ToTable("Permissions", (string)null);
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.ProgressTracking", b =>
-                {
-                    b.Property<int>("ProgressTrackingId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("ProgressTrackingId"));
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp")
-                        .HasDefaultValueSql("NOW()");
-
-                    b.Property<int>("EnrollmentId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("IsCompleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<DateTime?>("LastAccessedDate")
-                        .HasColumnType("timestamp");
-
-                    b.Property<int>("LmsModuleId")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("ProgressPct")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(5,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<int>("TenantId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("UpdatedDate")
-                        .HasColumnType("timestamp");
-
-                    b.HasKey("ProgressTrackingId");
-
-                    b.HasIndex("LmsModuleId");
-
-                    b.HasIndex("EnrollmentId", "LmsModuleId")
-                        .IsUnique();
-
-                    b.ToTable("ProgressTracking", (string)null);
                 });
 
             modelBuilder.Entity("HRMS.Core.Domain.Entities.Role", b =>
@@ -3473,31 +3119,6 @@ namespace HRMS.Migrations
                     b.Navigation("Staff");
                 });
 
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.Enrollment", b =>
-                {
-                    b.HasOne("HRMS.Core.Domain.Entities.LmsCourse", "Course")
-                        .WithMany("Enrollments")
-                        .HasForeignKey("LmsCourseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("HRMS.Core.Domain.Entities.Staff", "Staff")
-                        .WithMany()
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("HRMS.Core.Domain.Entities.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Course");
-
-                    b.Navigation("Staff");
-                });
-
             modelBuilder.Entity("HRMS.Core.Domain.Entities.ExperienceDetail", b =>
                 {
                     b.HasOne("HRMS.Core.Domain.Entities.Staff", "Staff")
@@ -3507,41 +3128,6 @@ namespace HRMS.Migrations
                         .IsRequired();
 
                     b.Navigation("Staff");
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LearningPath", b =>
-                {
-                    b.HasOne("HRMS.Core.Domain.Entities.MasterValue", "JobTitle")
-                        .WithMany()
-                        .HasForeignKey("JobTitleId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("HRMS.Core.Domain.Entities.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("JobTitle");
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LearningPathCourse", b =>
-                {
-                    b.HasOne("HRMS.Core.Domain.Entities.LearningPath", "LearningPath")
-                        .WithMany("Courses")
-                        .HasForeignKey("LearningPathId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("HRMS.Core.Domain.Entities.LmsCourse", "Course")
-                        .WithMany("LearningPathCourses")
-                        .HasForeignKey("LmsCourseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Course");
-
-                    b.Navigation("LearningPath");
                 });
 
             modelBuilder.Entity("HRMS.Core.Domain.Entities.LeaveBalance", b =>
@@ -3599,40 +3185,6 @@ namespace HRMS.Migrations
                     b.Navigation("Staff");
                 });
 
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LmsCourse", b =>
-                {
-                    b.HasOne("HRMS.Core.Domain.Entities.MasterValue", "CourseType")
-                        .WithMany()
-                        .HasForeignKey("CourseTypeId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("HRMS.Core.Domain.Entities.MasterValue", "Difficulty")
-                        .WithMany()
-                        .HasForeignKey("DifficultyId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("HRMS.Core.Domain.Entities.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("CourseType");
-
-                    b.Navigation("Difficulty");
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LmsModule", b =>
-                {
-                    b.HasOne("HRMS.Core.Domain.Entities.LmsCourse", "Course")
-                        .WithMany("Modules")
-                        .HasForeignKey("LmsCourseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Course");
-                });
-
             modelBuilder.Entity("HRMS.Core.Domain.Entities.MasterCategory", b =>
                 {
                     b.HasOne("HRMS.Core.Domain.Entities.Tenant", null)
@@ -3680,25 +3232,6 @@ namespace HRMS.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.ProgressTracking", b =>
-                {
-                    b.HasOne("HRMS.Core.Domain.Entities.Enrollment", "Enrollment")
-                        .WithMany("Progress")
-                        .HasForeignKey("EnrollmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("HRMS.Core.Domain.Entities.LmsModule", "Module")
-                        .WithMany("ProgressRecords")
-                        .HasForeignKey("LmsModuleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Enrollment");
-
-                    b.Navigation("Module");
                 });
 
             modelBuilder.Entity("HRMS.Core.Domain.Entities.Role", b =>
@@ -3777,30 +3310,6 @@ namespace HRMS.Migrations
                     b.Navigation("Role");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.Enrollment", b =>
-                {
-                    b.Navigation("Progress");
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LearningPath", b =>
-                {
-                    b.Navigation("Courses");
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LmsCourse", b =>
-                {
-                    b.Navigation("Enrollments");
-
-                    b.Navigation("LearningPathCourses");
-
-                    b.Navigation("Modules");
-                });
-
-            modelBuilder.Entity("HRMS.Core.Domain.Entities.LmsModule", b =>
-                {
-                    b.Navigation("ProgressRecords");
                 });
 
             modelBuilder.Entity("HRMS.Core.Domain.Entities.MasterCategory", b =>

@@ -31,6 +31,15 @@ public class UnitOfWork : IUnitOfWork
     public ICourseParticipantRepository CourseParticipant { get; }
     public ICourseAttendanceDateWiseRepository CourseAttendanceDateWise { get; }
     public ICourseResultRepository CourseResult { get; }
+    public IMenuGroupRepository MenuGroup { get; }
+    public IMenuItemRepository MenuItem { get; }
+    public IMasterCategoryRepository MasterCategory { get; }
+    public IMasterValueRepository MasterValue { get; }
+    public ILmsCourseRepository LmsCourse { get; }
+    public ILmsModuleRepository LmsModule { get; }
+    public ILearningPathRepository LearningPath { get; }
+    public IEnrollmentRepository Enrollment { get; }
+    public IProgressTrackingRepository ProgressTracking { get; }
 
     public UnitOfWork(
         HRMSDbContext context,
@@ -54,7 +63,16 @@ public class UnitOfWork : IUnitOfWork
         ICourseAttendanceRepository courseAttendance,
         ICourseParticipantRepository courseParticipant,
         ICourseAttendanceDateWiseRepository courseAttendanceDateWise,
-        ICourseResultRepository courseResult)
+        ICourseResultRepository courseResult,
+        IMenuGroupRepository menuGroup,
+        IMenuItemRepository menuItem,
+        IMasterCategoryRepository masterCategory,
+        IMasterValueRepository masterValue,
+        ILmsCourseRepository lmsCourse,
+        ILmsModuleRepository lmsModule,
+        ILearningPathRepository learningPath,
+        IEnrollmentRepository enrollment,
+        IProgressTrackingRepository progressTracking)
     {
         _context = context;
         AuditLogs = auditLogs;
@@ -78,6 +96,15 @@ public class UnitOfWork : IUnitOfWork
         CourseParticipant = courseParticipant;
         CourseAttendanceDateWise = courseAttendanceDateWise;
         CourseResult = courseResult;
+        MenuGroup = menuGroup;
+        MenuItem = menuItem;
+        MasterCategory = masterCategory;
+        MasterValue = masterValue;
+        LmsCourse = lmsCourse;
+        LmsModule = lmsModule;
+        LearningPath = learningPath;
+        Enrollment = enrollment;
+        ProgressTracking = progressTracking;
     }
 
     public async Task<int> SaveChangesAsync()

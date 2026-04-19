@@ -131,6 +131,15 @@ builder.Services.AddScoped<ICourseParticipantRepository, CourseParticipantReposi
 builder.Services.AddScoped<ICourseAttendanceDateWiseRepository, CourseAttendanceDateWiseRepository>();
 builder.Services.AddScoped<ICourseResultRepository, CourseResultRepository>();
 builder.Services.AddScoped<ITMSReportRepository, TMSReportRepository>();
+builder.Services.AddScoped<IMenuGroupRepository, MenuGroupRepository>();
+builder.Services.AddScoped<IMenuItemRepository, MenuItemRepository>();
+builder.Services.AddScoped<IMasterCategoryRepository, MasterCategoryRepository>();
+builder.Services.AddScoped<IMasterValueRepository, MasterValueRepository>();
+builder.Services.AddScoped<ILmsCourseRepository, LmsCourseRepository>();
+builder.Services.AddScoped<ILmsModuleRepository, LmsModuleRepository>();
+builder.Services.AddScoped<ILearningPathRepository, LearningPathRepository>();
+builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
+builder.Services.AddScoped<IProgressTrackingRepository, ProgressTrackingRepository>();
 
 // Register Unit of Work
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -167,6 +176,11 @@ builder.Services.AddScoped<ICoursePlanningService, CoursePlanningService>();
 builder.Services.AddScoped<ICourseAttendanceService, CourseAttendanceService>();
 builder.Services.AddScoped<ICourseParticipantService, CourseParticipantService>();
 builder.Services.AddScoped<ITMSReportService, TMSReportService>();
+builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<IMasterDataService, MasterDataService>();
+builder.Services.AddScoped<ILmsCourseService, LmsCourseService>();
+builder.Services.AddScoped<ILearningPathService, LearningPathService>();
+builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
 
 var app = builder.Build();
 
@@ -179,6 +193,8 @@ using (var scope = app.Services.CreateScope())
         var unitOfWork    = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         var tenantRepo    = scope.ServiceProvider.GetRequiredService<ITenantRepository>();
         var seedingSvc    = scope.ServiceProvider.GetRequiredService<ISeedingService>();
+        var menuSvc       = scope.ServiceProvider.GetRequiredService<IMenuService>();
+        var masterSvc     = scope.ServiceProvider.GetRequiredService<IMasterDataService>();
 
         var allUsersCache = (await unitOfWork.User.GetAllUsers()).ToList();
 
@@ -203,7 +219,12 @@ using (var scope = app.Services.CreateScope())
             //    but were never assigned access levels (most common manual-setup gap)
             await seedingSvc.EnsureRolePermissionsSeededAsync(tenant.TenantId, createdBy);
 
-            // 3. For any user whose Role string is set but has no UserRole row, create it now
+            // 4. Seed menus and master data if missing
+            var createdByStr = firstUser?.UserId.ToString() ?? "system";
+            await menuSvc.SeedDefaultMenuAsync(tenant.TenantId, createdByStr);
+            await masterSvc.SeedDefaultCategoriesAsync(tenant.TenantId, createdByStr);
+
+            // 5. For any user whose Role string is set but has no UserRole row, create it now
             var tenantUsers = allUsersCache
                 .Where(u => u.TenantId == tenant.TenantId && u.IsActive && !string.IsNullOrEmpty(u.Role))
                 .ToList();

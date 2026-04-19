@@ -1,0 +1,228 @@
+Using launch settings from K:\hrms -new\HRMS\HRMS\Properties\launchSettings.json...
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (29ms) [Parameters=[], CommandType='Text', CommandTimeout='60']
+      SELECT u."UserId", u."CreatedBy", u."CreatedDate", u."Email", u."FailedLoginAttempts", u."FullName", u."IsActive", u."IsEmailVerified", u."IsLocked", u."LoginProvider", u."PasswordHash", u."Role", u."StaffId", u."TenantId", u."UpdatedBy", u."UpdatedDate"
+      FROM "Users" AS u
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (7ms) [Parameters=[], CommandType='Text', CommandTimeout='60']
+      SELECT t."TenantId", t."CompanyName", t."CreatedBy", t."CreatedDate", t."Domain", t."IsActive", t."IsLocked", t."UpdatedBy", t."UpdatedDate"
+      FROM "Tenants" AS t
+      WHERE t."IsActive" AND NOT (t."IsLocked")
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (12ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "Roles" AS r
+      WHERE r."TenantId" = @__tenantId_0 AND r."IsActive"
+      ORDER BY r."RoleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "Permissions" AS p
+      WHERE p."TenantId" = @__tenantId_0 AND p."IsActive"
+      ORDER BY p."ModuleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "Permissions" AS p
+      WHERE p."TenantId" = @__tenantId_0 AND p."IsActive"
+      ORDER BY p."ModuleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "Roles" AS r
+      WHERE r."TenantId" = @__tenantId_0 AND r."IsActive"
+      ORDER BY r."RoleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "Permissions" AS p
+      WHERE p."TenantId" = @__tenantId_0 AND p."IsActive"
+      ORDER BY p."ModuleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT m."MenuGroupId", m."CreatedBy", m."CreatedDate", m."Icon", m."IsActive", m."PermissionModule", m."SortOrder", m."TenantId", m."Title", m."UpdatedBy", m."UpdatedDate"
+      FROM "MenuGroups" AS m
+      WHERE m."TenantId" = @__tenantId_0 AND m."IsActive"
+      ORDER BY m."SortOrder"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT m."MasterCategoryId", m."CategoryCode", m."CategoryName", m."CreatedBy", m."CreatedDate", m."IsActive", m."TenantId", m."UpdatedBy", m."UpdatedDate"
+      FROM "MasterCategories" AS m
+      WHERE m."TenantId" = @__tenantId_0 AND m."IsActive"
+      ORDER BY m."CategoryName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "Roles" AS r
+      WHERE r."TenantId" = @__tenantId_0 AND r."IsActive"
+      ORDER BY r."RoleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[@__userId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT u."Id", u."CreatedBy", u."CreatedDate", u."IsActive", u."RoleId", u."TenantId", u."UpdatedBy", u."UpdatedDate", u."UserId", r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "UserRoles" AS u
+      INNER JOIN "Roles" AS r ON u."RoleId" = r."RoleId"
+      WHERE u."UserId" = @__userId_0 AND u."TenantId" = @__tenantId_1 AND u."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__userId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT u."Id", u."CreatedBy", u."CreatedDate", u."IsActive", u."RoleId", u."TenantId", u."UpdatedBy", u."UpdatedDate", u."UserId", r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "UserRoles" AS u
+      INNER JOIN "Roles" AS r ON u."RoleId" = r."RoleId"
+      WHERE u."UserId" = @__userId_0 AND u."TenantId" = @__tenantId_1 AND u."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__userId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT u."Id", u."CreatedBy", u."CreatedDate", u."IsActive", u."RoleId", u."TenantId", u."UpdatedBy", u."UpdatedDate", u."UserId", r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "UserRoles" AS u
+      INNER JOIN "Roles" AS r ON u."RoleId" = r."RoleId"
+      WHERE u."UserId" = @__userId_0 AND u."TenantId" = @__tenantId_1 AND u."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__userId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT u."Id", u."CreatedBy", u."CreatedDate", u."IsActive", u."RoleId", u."TenantId", u."UpdatedBy", u."UpdatedDate", u."UserId", r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "UserRoles" AS u
+      INNER JOIN "Roles" AS r ON u."RoleId" = r."RoleId"
+      WHERE u."UserId" = @__userId_0 AND u."TenantId" = @__tenantId_1 AND u."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__userId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT u."Id", u."CreatedBy", u."CreatedDate", u."IsActive", u."RoleId", u."TenantId", u."UpdatedBy", u."UpdatedDate", u."UserId", r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "UserRoles" AS u
+      INNER JOIN "Roles" AS r ON u."RoleId" = r."RoleId"
+      WHERE u."UserId" = @__userId_0 AND u."TenantId" = @__tenantId_1 AND u."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__userId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT u."Id", u."CreatedBy", u."CreatedDate", u."IsActive", u."RoleId", u."TenantId", u."UpdatedBy", u."UpdatedDate", u."UserId", r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "UserRoles" AS u
+      INNER JOIN "Roles" AS r ON u."RoleId" = r."RoleId"
+      WHERE u."UserId" = @__userId_0 AND u."TenantId" = @__tenantId_1 AND u."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "Roles" AS r
+      WHERE r."TenantId" = @__tenantId_0 AND r."IsActive"
+      ORDER BY r."RoleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "Permissions" AS p
+      WHERE p."TenantId" = @__tenantId_0 AND p."IsActive"
+      ORDER BY p."ModuleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "Permissions" AS p
+      WHERE p."TenantId" = @__tenantId_0 AND p."IsActive"
+      ORDER BY p."ModuleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "Roles" AS r
+      WHERE r."TenantId" = @__tenantId_0 AND r."IsActive"
+      ORDER BY r."RoleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "Permissions" AS p
+      WHERE p."TenantId" = @__tenantId_0 AND p."IsActive"
+      ORDER BY p."ModuleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__roleId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."Id", r."AccessLevel", r."CreatedBy", r."CreatedDate", r."IsActive", r."PermissionId", r."RoleId", r."TenantId", r."UpdatedBy", r."UpdatedDate", p."PermissionId", p."CreatedBy", p."CreatedDate", p."IsActive", p."ModuleName", p."TenantId", p."UpdatedBy", p."UpdatedDate"
+      FROM "RolePermissions" AS r
+      INNER JOIN "Permissions" AS p ON r."PermissionId" = p."PermissionId"
+      WHERE r."RoleId" = @__roleId_0 AND r."TenantId" = @__tenantId_1 AND r."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT m."MenuGroupId", m."CreatedBy", m."CreatedDate", m."Icon", m."IsActive", m."PermissionModule", m."SortOrder", m."TenantId", m."Title", m."UpdatedBy", m."UpdatedDate"
+      FROM "MenuGroups" AS m
+      WHERE m."TenantId" = @__tenantId_0 AND m."IsActive"
+      ORDER BY m."SortOrder"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT m."MasterCategoryId", m."CategoryCode", m."CategoryName", m."CreatedBy", m."CreatedDate", m."IsActive", m."TenantId", m."UpdatedBy", m."UpdatedDate"
+      FROM "MasterCategories" AS m
+      WHERE m."TenantId" = @__tenantId_0 AND m."IsActive"
+      ORDER BY m."CategoryName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__tenantId_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "Roles" AS r
+      WHERE r."TenantId" = @__tenantId_0 AND r."IsActive"
+      ORDER BY r."RoleName"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@__userId_0='?' (DbType = Int32), @__tenantId_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='60']
+      SELECT u."Id", u."CreatedBy", u."CreatedDate", u."IsActive", u."RoleId", u."TenantId", u."UpdatedBy", u."UpdatedDate", u."UserId", r."RoleId", r."CreatedBy", r."CreatedDate", r."Description", r."IsActive", r."RoleName", r."TenantId", r."UpdatedBy", r."UpdatedDate"
+      FROM "UserRoles" AS u
+      INNER JOIN "Roles" AS r ON u."RoleId" = r."RoleId"
+      WHERE u."UserId" = @__userId_0 AND u."TenantId" = @__tenantId_1 AND u."IsActive"
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5070
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: K:\hrms -new\HRMS\HRMS

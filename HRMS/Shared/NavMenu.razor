@@ -57,53 +57,15 @@
 
     private List<NavGroup> _visibleGroups = new();
 
-    // Static nav definition — Permission must exactly match Permission.ModuleName in the database.
-    // Visibility is 100% driven by database permissions — no role names hardcoded here.
-    private static readonly List<NavGroup> AllGroups =
-    [
-        new NavGroup("WorkForce360", Icons.Material.Filled.People,
-        [
-            new NavItem("Employee Management", "/hrms/employees",      Icons.Material.Filled.Person,         "Employee Management"),
-            new NavItem("Staff Attendance",    "/hrms/attendance",     Icons.Material.Filled.HowToReg,       "Employee Management"),
-            new NavItem("My Leave",            "/hrms/leave",          Icons.Material.Filled.CalendarToday,  "Leave Management"),
-            new NavItem("Leave Approvals",     "/hrms/leave/approval", Icons.Material.Filled.CheckCircle,    "Leave Approval"),
-            new NavItem("Leave Configuration", "/hrms/leave/types",    Icons.Material.Filled.List,           "Leave Configuration"),
-            new NavItem("Holidays",            "/hrms/leave/holidays", Icons.Material.Filled.BeachAccess,    "Leave Configuration"),
-        ]),
-        new NavGroup("My Training", Icons.Material.Filled.School,
-        [
-            new NavItem("My Courses", "/tms/my-courses", Icons.Material.Filled.School, "My Training"),
-        ]),
-        new NavGroup("TMS", Icons.Material.Filled.CastForEducation,
-        [
-            new NavItem("TMS Dashboard",     "/tms/dashboard",  Icons.Material.Filled.CastForEducation, "Course Management"),
-            new NavItem("Course Management", "/tms/courses",    Icons.Material.Filled.Book,             "Course Management"),
-            new NavItem("Course Planning",   "/tms/planning",   Icons.Material.Filled.EventNote,        "Course Management"),
-        ]),
-        new NavGroup("Reports", Icons.Material.Filled.Assessment,
-        [
-            new NavItem("General Report",    "/tms/reports/general",     Icons.Material.Filled.TableChart,    "TMS Reports"),
-            new NavItem("Trainer KPI",       "/tms/reports/trainer-kpi", Icons.Material.Filled.Person,        "TMS Reports"),
-            new NavItem("Statistics Report", "/tms/reports/statistics",  Icons.Material.Filled.BarChart,      "TMS Reports"),
-        ]),
-        new NavGroup("Admin", Icons.Material.Filled.AdminPanelSettings,
-        [
-            new NavItem("User Management", "/admin/users",          Icons.Material.Filled.People,    "Role Management"),
-            new NavItem("Role Management", "/admin/roles",          Icons.Material.Filled.Assignment,"Role Management"),
-            new NavItem("Access Control",  "/admin/access-control", Icons.Material.Filled.Security,  "Access Control"),
-            new NavItem("Audit Logs",      "/admin/audit-logs",     Icons.Material.Filled.ListAlt,   "Audit Logs"),
-        ]),
-    ];
-
     private bool _permissionsLoaded = false;
     private int _userId;
     private int _tenantId;
     private string? _previousPath;
 
-    // Paths that can change role/permission assignments
+    // Paths that can change role/permission/menu assignments — force reload when navigating away
     private static readonly HashSet<string> PermissionChangingPaths = new(StringComparer.OrdinalIgnoreCase)
     {
-        "/admin/access-control", "/admin/user-roles", "/admin/users", "/admin/roles"
+        "/admin/access-control", "/admin/user-roles", "/admin/users", "/admin/roles", "/admin/menu-management"
     };
 
     protected override void OnInitialized()
@@ -122,7 +84,6 @@
         var prev = _previousPath ?? string.Empty;
         _previousPath = e.Location;
 
-        // Reload menu when navigating away from any permission-affecting page
         var prevPath = "/" + prev.Replace(Navigation.BaseUri, "").TrimStart('/').Split('?')[0].TrimStart('/');
         var newPath  = "/" + e.Location.Replace(Navigation.BaseUri, "").TrimStart('/').Split('?')[0].TrimStart('/');
 
@@ -162,18 +123,28 @@
                 return;
             }
 
-            // Fresh DbContext via factory to avoid EF Core concurrency errors
             Dictionary<string, int> permissions;
+            IEnumerable<HRMS.Core.Domain.Entities.MenuGroup> dbGroups;
+
             using (var uow = UnitOfWorkFactory.Create())
             {
                 permissions = await LoadPermissionsAsync(uow, _userId, _tenantId);
+                dbGroups    = await uow.MenuGroup.GetWithItemsAsync(_tenantId);
             }
 
-            _visibleGroups = AllGroups
+            _visibleGroups = dbGroups
+                .Where(g => g.IsActive)
+                .OrderBy(g => g.SortOrder)
                 .Select(g => new NavGroup(
                     g.Title,
-                    g.GroupIcon,
-                    g.Items.Where(item => permissions.GetValueOrDefault(item.Permission, 0) > 0).ToList()
+                    g.Icon,
+                    g.MenuItems
+                        .Where(i => i.IsActive &&
+                                    (i.PermissionModule == null ||
+                                     permissions.GetValueOrDefault(i.PermissionModule, 0) > 0))
+                        .OrderBy(i => i.SortOrder)
+                        .Select(i => new NavItem(i.Label, i.Href, i.Icon, i.PermissionModule ?? string.Empty))
+                        .ToList()
                 ))
                 .Where(g => g.Items.Count > 0)
                 .ToList();
@@ -182,7 +153,7 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "NavMenu: error loading permissions");
+            Logger.LogError(ex, "NavMenu: error loading menu");
             _visibleGroups = new();
         }
     }
@@ -236,6 +207,5 @@
     }
 
     private record NavItem(string Label, string Href, string Icon, string Permission);
-
     private record NavGroup(string Title, string GroupIcon, List<NavItem> Items);
 }

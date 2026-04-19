@@ -1,0 +1,254 @@
+@page "/lms/my-courses"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILmsCourseService LmsCourseService
+@inject IEnrollmentService EnrollmentService
+@inject ISnackbar Snackbar
+@inject ILogger<MyLmsCourses> Logger
+@inject NavigationManager Navigation
+
+<PageTitle>My Courses</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+    <div class="mb-4">
+        <MudText Typo="Typo.h5" Style="font-weight:700;color:#1a237e;">
+            <MudIcon Icon="@Icons.Material.Filled.School" Class="mr-2" Style="vertical-align:middle;" />
+            My Learning
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Track your enrolled courses and progress</MudText>
+    </div>
+
+    <!-- Summary Cards -->
+    <MudGrid Spacing="3" Class="mb-4">
+        <MudItem xs="12" sm="3">
+            <MudPaper Elevation="2" Class="pa-4 text-center" Style="border-radius:12px;border-top:4px solid #1a237e;">
+                <MudText Typo="Typo.h4" Style="font-weight:700;color:#1a237e;">@_enrollments.Count</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Enrolled</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudPaper Elevation="2" Class="pa-4 text-center" Style="border-radius:12px;border-top:4px solid #ff9800;">
+                <MudText Typo="Typo.h4" Style="font-weight:700;color:#ff9800;">@_enrollments.Count(e => e.Status == "InProgress")</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">In Progress</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudPaper Elevation="2" Class="pa-4 text-center" Style="border-radius:12px;border-top:4px solid #4caf50;">
+                <MudText Typo="Typo.h4" Style="font-weight:700;color:#4caf50;">@_enrollments.Count(e => e.Status == "Completed")</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Completed</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudPaper Elevation="2" Class="pa-4 text-center" Style="border-radius:12px;border-top:4px solid #9c27b0;">
+                <MudText Typo="Typo.h4" Style="font-weight:700;color:#9c27b0;">@AvgProgress%</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Progress</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Tabs: Enrolled | Explore -->
+    <MudTabs Rounded="true" Border="true" ApplyEffectsToContainer="true" Class="mt-2">
+        <MudTabPanel Text="My Enrollments" Icon="@Icons.Material.Filled.LibraryBooks">
+            @if (_isLoading)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
+            }
+            else if (!_enrollments.Any())
+            {
+                <MudPaper Elevation="0" Class="pa-8 text-center mt-4" Style="background:#f9f9f9;border-radius:12px;">
+                    <MudIcon Icon="@Icons.Material.Filled.LibraryBooks" Size="Size.Large" Color="Color.Default" />
+                    <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">No enrollments yet</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Browse available courses and enroll to start learning.</MudText>
+                </MudPaper>
+            }
+            else
+            {
+                <MudGrid Spacing="3" Class="mt-2">
+                    @foreach (var e in _enrollments)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCard Elevation="2" Style="border-radius:12px;">
+                                <div style="height:80px;background:linear-gradient(135deg,#1a237e,#3949ab);display:flex;align-items:center;padding:16px;border-radius:12px 12px 0 0;">
+                                    <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="color:white;font-size:32px;margin-right:12px;" />
+                                    <div>
+                                        <MudText Typo="Typo.subtitle1" Style="color:white;font-weight:600;line-height:1.2;">@e.CourseTitle</MudText>
+                                        <MudText Typo="Typo.caption" Style="color:rgba(255,255,255,0.8);">@(e.CourseTypeName ?? "Course")</MudText>
+                                    </div>
+                                </div>
+                                <MudCardContent Class="pb-0">
+                                    <div class="d-flex align-center justify-space-between mb-2">
+                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(e.Status)">@e.Status</MudChip>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @FormatDuration(e.DurationMinutes)
+                                        </MudText>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Progress</MudText>
+                                    <MudProgressLinear Color="@GetProgressColor(e.OverallProgress)"
+                                                       Value="@((double)e.OverallProgress)" Class="mb-1" Rounded="true" />
+                                    <div class="d-flex justify-space-between">
+                                        <MudText Typo="Typo.caption">@e.OverallProgress%</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            Enrolled: @e.EnrolledDate.ToString("MMM dd, yyyy")
+                                        </MudText>
+                                    </div>
+                                    @if (e.CompletedDate.HasValue)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Success" Class="mt-1">
+                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                            Completed: @e.CompletedDate.Value.ToString("MMM dd, yyyy")
+                                        </MudText>
+                                    }
+                                </MudCardContent>
+                                <MudCardActions>
+                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                               OnClick="@(() => Navigation.NavigateTo($"/lms/courses/{e.LmsCourseId}"))">
+                                        @(e.Status == "Completed" ? "Review" : "Continue")
+                                    </MudButton>
+                                </MudCardActions>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Browse Courses" Icon="@Icons.Material.Filled.Explore">
+            @if (_isLoadingBrowse)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-2" />
+            }
+            else
+            {
+                <MudGrid Spacing="3" Class="mt-2">
+                    @foreach (var c in _availableCourses)
+                    {
+                        var alreadyEnrolled = _enrollments.Any(e => e.LmsCourseId == c.LmsCourseId);
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCard Elevation="2" Style="border-radius:12px;">
+                                <div style="height:80px;background:linear-gradient(135deg,#37474f,#607d8b);display:flex;align-items:center;padding:16px;border-radius:12px 12px 0 0;">
+                                    <MudIcon Icon="@Icons.Material.Filled.MenuBook" Style="color:white;font-size:32px;margin-right:12px;" />
+                                    <div>
+                                        <MudText Typo="Typo.subtitle1" Style="color:white;font-weight:600;line-height:1.2;">@c.Title</MudText>
+                                        <MudText Typo="Typo.caption" Style="color:rgba(255,255,255,0.8);">@(c.CourseTypeName ?? "Course")</MudText>
+                                    </div>
+                                </div>
+                                <MudCardContent>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary"
+                                             Style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
+                                        @(c.Description ?? "No description.")
+                                    </MudText>
+                                    <div class="d-flex gap-2 mt-2 flex-wrap">
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                            <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                                            @FormatDuration(c.DurationMinutes)
+                                        </MudChip>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">
+                                            @(c.DifficultyName ?? "N/A")
+                                        </MudChip>
+                                    </div>
+                                </MudCardContent>
+                                <MudCardActions>
+                                    @if (alreadyEnrolled)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="true">
+                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                            Enrolled
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                                   OnClick="@(() => EnrollCourse(c))">
+                                            Enroll
+                                        </MudButton>
+                                    }
+                                </MudCardActions>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private int _tenantId;
+    private int _staffId;
+    private string _userId = string.Empty;
+    private bool _isLoading = true;
+    private bool _isLoadingBrowse = true;
+
+    private List<EnrollmentDto> _enrollments = new();
+    private List<LmsCourseDto> _availableCourses = new();
+
+    private int AvgProgress => _enrollments.Any()
+        ? (int)_enrollments.Average(e => (double)e.OverallProgress)
+        : 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        _userId   = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0";
+        _tenantId = int.TryParse(user.FindFirstValue("TenantId"), out var tid) ? tid : 1;
+        _staffId  = int.TryParse(user.FindFirstValue("StaffId"),  out var sid) ? sid : 0;
+
+        await Task.WhenAll(LoadEnrollments(), LoadAvailableCourses());
+    }
+
+    private async Task LoadEnrollments()
+    {
+        _isLoading = true;
+        try
+        {
+            _enrollments = (await EnrollmentService.GetByStaffAsync(_staffId, _tenantId)).ToList();
+        }
+        catch (Exception ex) { Logger.LogError(ex, "Error loading enrollments"); }
+        finally { _isLoading = false; }
+    }
+
+    private async Task LoadAvailableCourses()
+    {
+        _isLoadingBrowse = true;
+        try
+        {
+            _availableCourses = (await LmsCourseService.GetAllAsync(_tenantId)).ToList();
+        }
+        catch (Exception ex) { Logger.LogError(ex, "Error loading courses"); }
+        finally { _isLoadingBrowse = false; }
+    }
+
+    private async Task EnrollCourse(LmsCourseDto course)
+    {
+        var req = new EnrollRequest
+        {
+            StaffId = _staffId, LmsCourseId = course.LmsCourseId,
+            TenantId = _tenantId, CreatedBy = _userId
+        };
+        var result = await EnrollmentService.EnrollAsync(req);
+        Snackbar.Add(result.Message, result.Success ? Severity.Success : Severity.Error);
+        if (result.Success) await LoadEnrollments();
+    }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Completed"  => Color.Success,
+        "InProgress" => Color.Warning,
+        "Withdrawn"  => Color.Error,
+        _            => Color.Default
+    };
+
+    private static Color GetProgressColor(decimal pct) =>
+        pct >= 100 ? Color.Success : pct >= 50 ? Color.Warning : Color.Primary;
+
+    private static string FormatDuration(int minutes) =>
+        minutes >= 60 ? $"{minutes / 60}h {minutes % 60}m" : $"{minutes}m";
+
+    public void Dispose() { }
+}
