@@ -128,9 +128,13 @@ public class CourseAttendanceService : ICourseAttendanceService
     {
         try
         {
+            // Normalize to DateTimeKind.Unspecified so Npgsql doesn't reject it
+            // for a 'timestamp without time zone' column (DateTime.Now.Date is Local kind)
+            var normalizedDate = new DateTime(today.Year, today.Month, today.Day, 0, 0, 0, DateTimeKind.Unspecified);
+
             // Check if a date-wise record already exists for this participant + date
             var existing = await _unitOfWork.CourseAttendanceDateWise
-                .GetByCoursePlanStaffDateAsync(request.CoursePlanId, request.StaffId, today, tenantId);
+                .GetByCoursePlanStaffDateAsync(request.CoursePlanId, request.StaffId, normalizedDate, tenantId);
 
             if (existing != null)
             {
@@ -147,7 +151,7 @@ public class CourseAttendanceService : ICourseAttendanceService
                 {
                     CoursePlanId   = request.CoursePlanId,
                     StaffId        = request.StaffId,
-                    AttendanceDate = today,
+                    AttendanceDate = normalizedDate,
                     IsPresent      = true,
                     TenantId       = tenantId,
                     IsActive       = true,

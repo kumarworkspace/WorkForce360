@@ -19,7 +19,7 @@ public class AuditLogService : IAuditLogService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<PagedResult<AuditLogDto>> GetPagedAsync(int tenantId, int pageNumber, int pageSize, string? searchTerm, string? actionType, DateTime? startDate, DateTime? endDate)
+    public async Task<PagedResult<AuditLogDto>> GetPagedAsync(int tenantId, int pageNumber, int pageSize, string? searchTerm, string? actionType, DateTime? startDate, DateTime? endDate, string? module = null)
     {
         try
         {
@@ -35,7 +35,8 @@ public class AuditLogService : IAuditLogService
                 var searchLower = searchTerm.ToLower();
                 query = query.Where(a =>
                     (a.Description != null && a.Description.ToLower().Contains(searchLower)) ||
-                    (a.IPAddress != null && a.IPAddress.ToLower().Contains(searchLower))
+                    (a.IPAddress != null && a.IPAddress.ToLower().Contains(searchLower)) ||
+                    (a.Module != null && a.Module.ToLower().Contains(searchLower))
                 );
             }
 
@@ -43,6 +44,13 @@ public class AuditLogService : IAuditLogService
             if (!string.IsNullOrWhiteSpace(actionType) && Enum.TryParse<ActionType>(actionType, out var parsedActionType))
             {
                 query = query.Where(a => a.ActionType == parsedActionType);
+            }
+
+            // Apply module filter
+            if (!string.IsNullOrWhiteSpace(module))
+            {
+                var moduleLower = module.ToLower();
+                query = query.Where(a => a.Module != null && a.Module.ToLower() == moduleLower);
             }
 
             // Apply date range filter
@@ -118,6 +126,8 @@ public class AuditLogService : IAuditLogService
                     UserEmail = user?.Email,
                     UserRole = user?.Role,
                     ActionType = a.ActionType.ToString(),
+                    Module = a.Module,
+                    RecordId = a.RecordId,
                     Description = a.Description,
                     IPAddress = a.IPAddress,
                     CreatedDate = a.CreatedDate,
@@ -163,6 +173,8 @@ public class AuditLogService : IAuditLogService
                 UserEmail = user?.Email,
                 UserRole = user?.Role,
                 ActionType = auditLog.ActionType.ToString(),
+                Module = auditLog.Module,
+                RecordId = auditLog.RecordId,
                 Description = auditLog.Description,
                 IPAddress = auditLog.IPAddress,
                 CreatedDate = auditLog.CreatedDate,

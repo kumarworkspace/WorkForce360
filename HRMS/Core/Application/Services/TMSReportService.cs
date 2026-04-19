@@ -16,55 +16,33 @@ public class TMSReportService : ITMSReportService
         _logger = logger;
     }
 
-    public async Task<TMSOverallSummaryDto> GetOverallSummaryAsync(TMSReportFilter filter)
+    public async Task<GeneralReportResultDto> GetGeneralReportAsync(GeneralReportFilter filter)
     {
-        try
-        {
-            return await _repo.GetOverallSummaryAsync(filter);
-        }
+        try { return await _repo.GetGeneralReportAsync(filter); }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching TMS overall summary for Tenant {TenantId}", filter.TenantId);
-            return new TMSOverallSummaryDto();
+            _logger.LogError(ex, "Error fetching General Report for Tenant {TenantId}", filter.TenantId);
+            return new GeneralReportResultDto();
         }
     }
 
-    public async Task<IEnumerable<TMSMonthlySummaryDto>> GetMonthlySummaryAsync(TMSReportFilter filter)
+    public async Task<TrainerKPIResultDto> GetTrainerKPIReportAsync(TrainerKPIFilter filter)
     {
-        try
-        {
-            return await _repo.GetMonthlySummaryAsync(filter);
-        }
+        try { return await _repo.GetTrainerKPIReportAsync(filter); }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching TMS monthly summary for Tenant {TenantId}", filter.TenantId);
-            return Enumerable.Empty<TMSMonthlySummaryDto>();
+            _logger.LogError(ex, "Error fetching Trainer KPI Report for Tenant {TenantId}", filter.TenantId);
+            return new TrainerKPIResultDto();
         }
     }
 
-    public async Task<IEnumerable<TMSTrainerPerformanceDto>> GetTrainerPerformanceAsync(TMSReportFilter filter)
+    public async Task<StatisticsResultDto> GetStatisticsReportAsync(StatisticsFilter filter)
     {
-        try
-        {
-            return await _repo.GetTrainerPerformanceAsync(filter);
-        }
+        try { return await _repo.GetStatisticsReportAsync(filter); }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching TMS trainer performance for Tenant {TenantId}", filter.TenantId);
-            return Enumerable.Empty<TMSTrainerPerformanceDto>();
-        }
-    }
-
-    public async Task<IEnumerable<TMSCourseWiseReportDto>> GetCourseWiseReportAsync(TMSReportFilter filter)
-    {
-        try
-        {
-            return await _repo.GetCourseWiseReportAsync(filter);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching TMS course-wise report for Tenant {TenantId}", filter.TenantId);
-            return Enumerable.Empty<TMSCourseWiseReportDto>();
+            _logger.LogError(ex, "Error fetching Statistics Report for Tenant {TenantId}", filter.TenantId);
+            return new StatisticsResultDto();
         }
     }
 }

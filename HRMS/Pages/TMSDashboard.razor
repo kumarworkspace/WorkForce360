@@ -8,6 +8,7 @@
 @inject ICourseRegistrationService CourseService
 @inject IStaffService StaffService
 @inject IUserService UserService
+@inject IAuthorizationHelper AuthorizationHelper
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject ILogger<TMSDashboard> Logger
@@ -178,12 +179,9 @@
         _tenantId = int.Parse(tenantIdClaim);
         _userId = int.Parse(userIdClaim);
 
-        // Apply role-based filtering
-        // If user is a Trainer (not Super Admin), apply role-based filtering to show:
-        // 1. Courses created by the trainer (CreatedBy = userId)
-        // 2. Courses assigned to the trainer (TrainerId = staffId)
-        var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
-        if (roleClaim != "Super Admin")
+        // Full Access (3) = see all data; lower = own courses only
+        var accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Course Management", _tenantId);
+        if (accessLevel < 3)
         {
             _createdBy = _userId;
 

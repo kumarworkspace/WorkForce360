@@ -46,7 +46,9 @@
 @using HRMS.Core.Domain.Interfaces
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IUnitOfWorkFactory UnitOfWorkFactory
+@inject NavigationManager Navigation
 @inject ILogger<NavMenu> Logger
+@implements IDisposable
 
 @code {
     private bool _drawerOpen = false;
@@ -74,10 +76,15 @@
         ]),
         new NavGroup("TMS", Icons.Material.Filled.CastForEducation,
         [
-            new NavItem("TMS Dashboard",    "/tms/dashboard", Icons.Material.Filled.CastForEducation, "Course Management"),
-            new NavItem("Course Management","/tms/courses",   Icons.Material.Filled.Book,             "Course Management"),
-            new NavItem("Course Planning",  "/tms/planning",  Icons.Material.Filled.EventNote,        "Course Management"),
-            new NavItem("TMS Reports",      "/tms/reports",   Icons.Material.Filled.BarChart,         "Course Management"),
+            new NavItem("TMS Dashboard",     "/tms/dashboard",  Icons.Material.Filled.CastForEducation, "Course Management"),
+            new NavItem("Course Management", "/tms/courses",    Icons.Material.Filled.Book,             "Course Management"),
+            new NavItem("Course Planning",   "/tms/planning",   Icons.Material.Filled.EventNote,        "Course Management"),
+        ]),
+        new NavGroup("Reports", Icons.Material.Filled.Assessment,
+        [
+            new NavItem("General Report",    "/tms/reports/general",     Icons.Material.Filled.TableChart,    "TMS Reports"),
+            new NavItem("Trainer KPI",       "/tms/reports/trainer-kpi", Icons.Material.Filled.Person,        "TMS Reports"),
+            new NavItem("Statistics Report", "/tms/reports/statistics",  Icons.Material.Filled.BarChart,      "TMS Reports"),
         ]),
         new NavGroup("Admin", Icons.Material.Filled.AdminPanelSettings,
         [
@@ -89,10 +96,53 @@
     ];
 
     private bool _permissionsLoaded = false;
+    private int _userId;
+    private int _tenantId;
+    private string? _previousPath;
+
+    // Paths that can change role/permission assignments
+    private static readonly HashSet<string> PermissionChangingPaths = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "/admin/access-control", "/admin/user-roles", "/admin/users", "/admin/roles"
+    };
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender || _permissionsLoaded) return;
+        await LoadMenuAsync();
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var prev = _previousPath ?? string.Empty;
+        _previousPath = e.Location;
+
+        // Reload menu when navigating away from any permission-affecting page
+        var prevPath = "/" + prev.Replace(Navigation.BaseUri, "").TrimStart('/').Split('?')[0].TrimStart('/');
+        var newPath  = "/" + e.Location.Replace(Navigation.BaseUri, "").TrimStart('/').Split('?')[0].TrimStart('/');
+
+        bool wasOnPermissionPage = PermissionChangingPaths.Any(p => prevPath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        bool isOnPermissionPage  = PermissionChangingPaths.Any(p => newPath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+        if (wasOnPermissionPage || isOnPermissionPage)
+        {
+            _permissionsLoaded = false;
+            await InvokeAsync(async () =>
+            {
+                await LoadMenuAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task LoadMenuAsync()
+    {
+        if (_permissionsLoaded) return;
         _permissionsLoaded = true;
 
         try
@@ -105,22 +155,20 @@
             var userIdClaim   = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var tenantIdClaim = user.FindFirst("TenantId")?.Value;
 
-            if (!int.TryParse(userIdClaim,   out var userId)  ||
-                !int.TryParse(tenantIdClaim, out var tenantId))
+            if (!int.TryParse(userIdClaim,   out _userId)  ||
+                !int.TryParse(tenantIdClaim, out _tenantId))
             {
                 Logger.LogWarning("NavMenu: could not parse userId='{U}' or tenantId='{T}' from claims", userIdClaim, tenantIdClaim);
                 return;
             }
 
-            // Use the factory so we get a fresh DbContext — avoids EF Core concurrency
-            // errors caused by page components and NavMenu using the same scoped instance.
+            // Fresh DbContext via factory to avoid EF Core concurrency errors
             Dictionary<string, int> permissions;
             using (var uow = UnitOfWorkFactory.Create())
             {
-                permissions = await LoadPermissionsAsync(uow, userId, tenantId);
+                permissions = await LoadPermissionsAsync(uow, _userId, _tenantId);
             }
 
-            // Build visible groups — solely driven by DB permissions, no role names in code
             _visibleGroups = AllGroups
                 .Select(g => new NavGroup(
                     g.Title,
@@ -137,6 +185,11 @@
             Logger.LogError(ex, "NavMenu: error loading permissions");
             _visibleGroups = new();
         }
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 
     private string DrawerCssClass => _drawerOpen ? "menu-drawer opened" : "menu-drawer collapsed";

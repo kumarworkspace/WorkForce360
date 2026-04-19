@@ -3,9 +3,13 @@
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
 @using Microsoft.Extensions.Logging
+@using HRMS.Core.Domain.Entities
+@using HRMS.Core.Domain.Enums
 @inject HRMS.Core.Domain.Interfaces.IUserRepository UserRepository
 @inject HRMS.Core.Domain.Interfaces.IUserRoleRepository UserRoleRepository
 @inject HRMS.Core.Application.Interfaces.ITenantValidationService TenantValidationService
+@inject HRMS.Core.Application.Interfaces.IAccessControlService AccessControlService
+@inject HRMS.Core.Domain.Interfaces.IUnitOfWork UnitOfWork
 @inject ILogger<HRMS.Core.Domain.Interfaces.IUserRepository> Logger
 @{
     const string DashboardPath = "/dashboard";
@@ -82,6 +86,18 @@
             return;
         }
 
+        // Validate permissions — Super Admin always gets in; all others need at least one permission > 0
+        if (!string.Equals(user.Role, HRMS.Core.Application.AppConstants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase))
+        {
+            var userPermissions = await AccessControlService.GetUserPermissionsAsync(user.UserId, user.TenantId);
+            if (!userPermissions.Any(p => p.Value > 0))
+            {
+                Logger.LogWarning("Login handler: User with no assigned permissions attempted login: {Email}, UserId: {UserId}", email, user.UserId);
+                Response.Redirect($"{SignInPath}?error=no_permissions_assigned");
+                return;
+            }
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.UserId.ToString()),
@@ -108,6 +124,33 @@
             authProperties);
 
         Logger.LogInformation("User logged in successfully: {Email}, TenantId: {TenantId}", email, user.TenantId);
+
+        // Audit log: Login
+        try
+        {
+            var ipAddress = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                ?? HttpContext.Request.Headers["X-Real-IP"].FirstOrDefault()
+                ?? HttpContext.Connection.RemoteIpAddress?.ToString();
+
+            await UnitOfWork.AuditLogs.AddAsync(new AuditLog
+            {
+                TenantId = user.TenantId,
+                UserId = user.UserId,
+                ActionType = ActionType.Login,
+                Module = "Authentication",
+                Description = $"User '{user.FullName}' ({user.Email}) logged in.",
+                IPAddress = ipAddress,
+                IsActive = true,
+                CreatedBy = user.UserId,
+                CreatedDate = DateTime.UtcNow
+            });
+            await UnitOfWork.SaveChangesAsync();
+        }
+        catch (Exception auditEx)
+        {
+            Logger.LogWarning(auditEx, "Failed to write login audit log for user {Email}", email);
+        }
+
         Response.Redirect(DashboardPath);
     }
     catch (Exception ex)

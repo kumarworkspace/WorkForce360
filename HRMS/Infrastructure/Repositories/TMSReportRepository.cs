@@ -16,155 +16,182 @@ public class TMSReportRepository : ITMSReportRepository
         _context = context;
     }
 
-    public async Task<TMSOverallSummaryDto> GetOverallSummaryAsync(TMSReportFilter filter)
+    public async Task<GeneralReportResultDto> GetGeneralReportAsync(GeneralReportFilter filter)
     {
+        var result = new GeneralReportResultDto();
+
         await _context.Database.OpenConnectionAsync();
         try
         {
             using var cmd = _context.Database.GetDbConnection().CreateCommand();
-            cmd.CommandText = "SELECT * FROM usp_GetTMSOverallSummary($1,$2,$3,$4,$5)";
+            cmd.CommandText = "SELECT * FROM usp_GetTMSGeneralReport($1,$2,$3,$4,$5,$6,$7,$8,$9)";
 
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.TenantId,                                       NpgsqlDbType = NpgsqlDbType.Integer });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.FromDate.HasValue ? (object)filter.FromDate.Value.Date : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Date });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.ToDate.HasValue   ? (object)filter.ToDate.Value.Date   : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Date });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.TrainerId.HasValue ? (object)filter.TrainerId.Value     : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Integer });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.CourseId.HasValue  ? (object)filter.CourseId.Value      : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Integer });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.TenantId });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Date,    Value = filter.FromDate.HasValue ? (object)filter.FromDate.Value.Date : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Date,    Value = filter.ToDate.HasValue   ? (object)filter.ToDate.Value.Date   : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.CourseId.HasValue  ? (object)filter.CourseId.Value  : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.TrainerId.HasValue ? (object)filter.TrainerId.Value : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Varchar, Value = string.IsNullOrWhiteSpace(filter.Department) ? DBNull.Value : filter.Department });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Varchar, Value = string.IsNullOrWhiteSpace(filter.Company)    ? DBNull.Value : filter.Company });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.PageNumber });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.PageSize });
 
             using var reader = await cmd.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-            {
-                return new TMSOverallSummaryDto
-                {
-                    TotalCourses               = reader.GetInt32(reader.GetOrdinal("TotalCourses")),
-                    TotalSessions              = reader.GetInt32(reader.GetOrdinal("TotalSessions")),
-                    TotalParticipantsEnrolled  = reader.GetInt32(reader.GetOrdinal("TotalParticipantsEnrolled")),
-                    TotalPresent               = reader.GetInt32(reader.GetOrdinal("TotalPresent")),
-                    AvgAttendancePercentage    = reader.GetDecimal(reader.GetOrdinal("AvgAttendancePercentage")),
-                    CoursesCompleted           = reader.GetInt32(reader.GetOrdinal("CoursesCompleted")),
-                    CoursesOngoing             = reader.GetInt32(reader.GetOrdinal("CoursesOngoing")),
-                    CoursesUpcoming            = reader.GetInt32(reader.GetOrdinal("CoursesUpcoming"))
-                };
-            }
+            bool summarySet = false;
 
-            return new TMSOverallSummaryDto();
-        }
-        finally
-        {
-            await _context.Database.CloseConnectionAsync();
-        }
-    }
-
-    public async Task<IEnumerable<TMSMonthlySummaryDto>> GetMonthlySummaryAsync(TMSReportFilter filter)
-    {
-        await _context.Database.OpenConnectionAsync();
-        try
-        {
-            using var cmd = _context.Database.GetDbConnection().CreateCommand();
-            cmd.CommandText = "SELECT * FROM usp_GetTMSMonthlySummary($1,$2,$3,$4,$5)";
-
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.TenantId,                                       NpgsqlDbType = NpgsqlDbType.Integer });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.FromDate.HasValue ? (object)filter.FromDate.Value.Date : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Date });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.ToDate.HasValue   ? (object)filter.ToDate.Value.Date   : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Date });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.TrainerId.HasValue ? (object)filter.TrainerId.Value     : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Integer });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.CourseId.HasValue  ? (object)filter.CourseId.Value      : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Integer });
-
-            var result = new List<TMSMonthlySummaryDto>();
-            using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                result.Add(new TMSMonthlySummaryDto
+                if (!summarySet)
                 {
-                    Year                    = reader.GetInt32(reader.GetOrdinal("Year")),
-                    Month                   = reader.GetInt32(reader.GetOrdinal("Month")),
-                    MonthName               = reader.GetString(reader.GetOrdinal("MonthName")),
-                    TotalSessions           = reader.GetInt32(reader.GetOrdinal("TotalSessions")),
-                    TotalParticipants       = reader.GetInt32(reader.GetOrdinal("TotalParticipants")),
-                    TotalPresent            = reader.GetInt32(reader.GetOrdinal("TotalPresent")),
-                    AvgAttendancePercentage = reader.GetDecimal(reader.GetOrdinal("AvgAttendancePercentage"))
+                    result.TotalCount = reader.GetInt64(reader.GetOrdinal("TotalCount"));
+                    result.Summary = new GeneralReportSummaryDto
+                    {
+                        TotalClasses       = reader.GetInt64(reader.GetOrdinal("TotalClasses")),
+                        TotalStaffAttended = reader.GetInt64(reader.GetOrdinal("GrandStaffAttended")),
+                        TotalHours         = reader.IsDBNull(reader.GetOrdinal("GrandTotalHours")) ? 0 : reader.GetDecimal(reader.GetOrdinal("GrandTotalHours"))
+                    };
+                    summarySet = true;
+                }
+
+                var startTimeRaw = reader.GetValue(reader.GetOrdinal("StartTime"));
+                var endTimeRaw   = reader.GetValue(reader.GetOrdinal("EndTime"));
+
+                result.Rows.Add(new GeneralReportRowDto
+                {
+                    RowNo              = reader.GetInt64(reader.GetOrdinal("RowNo")),
+                    CoursePlanId       = reader.GetInt32(reader.GetOrdinal("CoursePlanId")),
+                    StartDate          = reader.GetDateTime(reader.GetOrdinal("StartDate")),
+                    EndDate            = reader.GetDateTime(reader.GetOrdinal("EndDate")),
+                    StartTime          = startTimeRaw is TimeSpan st ? st : TimeSpan.Zero,
+                    EndTime            = endTimeRaw   is TimeSpan et ? et : TimeSpan.Zero,
+                    Title              = reader.GetString(reader.GetOrdinal("Title")),
+                    CourseCode         = reader.IsDBNull(reader.GetOrdinal("CourseCode"))  ? null : reader.GetString(reader.GetOrdinal("CourseCode")),
+                    CourseType         = reader.IsDBNull(reader.GetOrdinal("CourseType"))  ? null : reader.GetString(reader.GetOrdinal("CourseType")),
+                    TotalHours         = reader.IsDBNull(reader.GetOrdinal("TotalHours"))  ? 0    : reader.GetDecimal(reader.GetOrdinal("TotalHours")),
+                    TrainerName        = reader.GetString(reader.GetOrdinal("TrainerName")),
+                    Venue              = reader.IsDBNull(reader.GetOrdinal("Venue"))       ? null : reader.GetString(reader.GetOrdinal("Venue")),
+                    TotalStaffAttended = reader.GetInt64(reader.GetOrdinal("TotalStaffAttended"))
                 });
             }
-
-            return result;
         }
         finally
         {
             await _context.Database.CloseConnectionAsync();
         }
+
+        return result;
     }
 
-    public async Task<IEnumerable<TMSTrainerPerformanceDto>> GetTrainerPerformanceAsync(TMSReportFilter filter)
+    public async Task<TrainerKPIResultDto> GetTrainerKPIReportAsync(TrainerKPIFilter filter)
     {
+        var result = new TrainerKPIResultDto();
+
         await _context.Database.OpenConnectionAsync();
         try
         {
             using var cmd = _context.Database.GetDbConnection().CreateCommand();
-            cmd.CommandText = "SELECT * FROM usp_GetTMSTrainerPerformance($1,$2,$3,$4)";
+            cmd.CommandText = "SELECT * FROM usp_GetTMSTrainerKPIReport($1,$2,$3,$4,$5,$6,$7,$8)";
 
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.TenantId,                                       NpgsqlDbType = NpgsqlDbType.Integer });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.FromDate.HasValue ? (object)filter.FromDate.Value.Date : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Date });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.ToDate.HasValue   ? (object)filter.ToDate.Value.Date   : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Date });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.TrainerId.HasValue ? (object)filter.TrainerId.Value     : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Integer });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.TenantId });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.Year.HasValue  ? (object)filter.Year.Value  : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.Month.HasValue ? (object)filter.Month.Value : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Date,    Value = filter.FromDate.HasValue  ? (object)filter.FromDate.Value.Date  : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Date,    Value = filter.ToDate.HasValue    ? (object)filter.ToDate.Value.Date    : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.TrainerId.HasValue ? (object)filter.TrainerId.Value : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.PageNumber });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.PageSize });
 
-            var result = new List<TMSTrainerPerformanceDto>();
             using var reader = await cmd.ExecuteReaderAsync();
+            bool summarySet = false;
+
             while (await reader.ReadAsync())
             {
-                result.Add(new TMSTrainerPerformanceDto
+                if (!summarySet)
                 {
-                    StaffId                  = reader.GetInt32(reader.GetOrdinal("StaffId")),
-                    TrainerName              = reader.GetString(reader.GetOrdinal("TrainerName")),
-                    EmployeeCode             = reader.IsDBNull(reader.GetOrdinal("EmployeeCode")) ? null : reader.GetString(reader.GetOrdinal("EmployeeCode")),
-                    Department               = reader.IsDBNull(reader.GetOrdinal("Department"))   ? null : reader.GetString(reader.GetOrdinal("Department")),
-                    TotalCoursesConducted    = reader.GetInt32(reader.GetOrdinal("TotalCoursesConducted")),
-                    TotalParticipantsTrained = reader.GetInt32(reader.GetOrdinal("TotalParticipantsTrained")),
-                    AvgAttendancePercentage  = reader.GetDecimal(reader.GetOrdinal("AvgAttendancePercentage"))
+                    result.TotalCount = reader.GetInt64(reader.GetOrdinal("TotalCount"));
+                    result.Summary = new TrainerKPISummaryDto
+                    {
+                        TotalClasses = reader.GetInt64(reader.GetOrdinal("GrandClasses")),
+                        TotalHours   = reader.IsDBNull(reader.GetOrdinal("GrandHours")) ? 0 : reader.GetDecimal(reader.GetOrdinal("GrandHours"))
+                    };
+                    summarySet = true;
+                }
+
+                result.Rows.Add(new TrainerKPIRowDto
+                {
+                    RowNo        = reader.GetInt64(reader.GetOrdinal("RowNo")),
+                    StaffId      = reader.GetInt32(reader.GetOrdinal("StaffId")),
+                    TrainerName  = reader.GetString(reader.GetOrdinal("TrainerName")),
+                    EmployeeCode = reader.IsDBNull(reader.GetOrdinal("EmployeeCode")) ? null : reader.GetString(reader.GetOrdinal("EmployeeCode")),
+                    Department   = reader.IsDBNull(reader.GetOrdinal("Department"))   ? null : reader.GetString(reader.GetOrdinal("Department")),
+                    Year         = reader.GetInt32(reader.GetOrdinal("Year")),
+                    Month        = reader.GetInt32(reader.GetOrdinal("Month")),
+                    MonthName    = reader.GetString(reader.GetOrdinal("MonthName")),
+                    NumClasses   = reader.GetInt64(reader.GetOrdinal("NumClasses")),
+                    TotalHours   = reader.IsDBNull(reader.GetOrdinal("TotalHours")) ? 0 : reader.GetDecimal(reader.GetOrdinal("TotalHours"))
                 });
             }
-
-            return result;
         }
         finally
         {
             await _context.Database.CloseConnectionAsync();
         }
+
+        return result;
     }
 
-    public async Task<IEnumerable<TMSCourseWiseReportDto>> GetCourseWiseReportAsync(TMSReportFilter filter)
+    public async Task<StatisticsResultDto> GetStatisticsReportAsync(StatisticsFilter filter)
     {
+        var result = new StatisticsResultDto();
+
         await _context.Database.OpenConnectionAsync();
         try
         {
             using var cmd = _context.Database.GetDbConnection().CreateCommand();
-            cmd.CommandText = "SELECT * FROM usp_GetTMSCourseWiseReport($1,$2,$3,$4,$5)";
+            cmd.CommandText = "SELECT * FROM usp_GetTMSStatisticsReport($1,$2,$3,$4,$5,$6)";
 
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.TenantId,                                       NpgsqlDbType = NpgsqlDbType.Integer });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.FromDate.HasValue ? (object)filter.FromDate.Value.Date : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Date });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.ToDate.HasValue   ? (object)filter.ToDate.Value.Date   : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Date });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.TrainerId.HasValue ? (object)filter.TrainerId.Value     : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Integer });
-            cmd.Parameters.Add(new NpgsqlParameter { Value = filter.CourseId.HasValue  ? (object)filter.CourseId.Value      : DBNull.Value, NpgsqlDbType = NpgsqlDbType.Integer });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.TenantId });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Varchar, Value = string.IsNullOrWhiteSpace(filter.Department) ? DBNull.Value : filter.Department });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Varchar, Value = string.IsNullOrWhiteSpace(filter.Company)    ? DBNull.Value : filter.Company });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.Year.HasValue ? (object)filter.Year.Value : DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.PageNumber });
+            cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = filter.PageSize });
 
-            var result = new List<TMSCourseWiseReportDto>();
             using var reader = await cmd.ExecuteReaderAsync();
+            bool summarySet = false;
+
             while (await reader.ReadAsync())
             {
-                result.Add(new TMSCourseWiseReportDto
+                if (!summarySet)
                 {
-                    CourseId                  = reader.GetInt32(reader.GetOrdinal("CourseId")),
-                    CourseTitle               = reader.GetString(reader.GetOrdinal("CourseTitle")),
-                    CourseCode                = reader.IsDBNull(reader.GetOrdinal("CourseCode"))  ? null : reader.GetString(reader.GetOrdinal("CourseCode")),
-                    Category                  = reader.IsDBNull(reader.GetOrdinal("Category"))    ? null : reader.GetString(reader.GetOrdinal("Category")),
-                    TotalSessions             = reader.GetInt32(reader.GetOrdinal("TotalSessions")),
-                    TotalParticipantsEnrolled = reader.GetInt32(reader.GetOrdinal("TotalParticipantsEnrolled")),
-                    TotalPresent              = reader.GetInt32(reader.GetOrdinal("TotalPresent")),
-                    AvgAttendancePercentage   = reader.GetDecimal(reader.GetOrdinal("AvgAttendancePercentage"))
+                    result.TotalCount = reader.GetInt64(reader.GetOrdinal("TotalCount"));
+                    result.Summary = new StatisticsSummaryDto
+                    {
+                        TotalSessions  = reader.GetInt64(reader.GetOrdinal("GrandSessions")),
+                        TotalEnrolled  = reader.GetInt64(reader.GetOrdinal("GrandEnrolled")),
+                        TotalPresent   = reader.GetInt64(reader.GetOrdinal("GrandPresent")),
+                        AttendancePct  = reader.IsDBNull(reader.GetOrdinal("GrandAttendancePct")) ? 0 : reader.GetDecimal(reader.GetOrdinal("GrandAttendancePct"))
+                    };
+                    summarySet = true;
+                }
+
+                result.Rows.Add(new StatisticsRowDto
+                {
+                    RowNo          = reader.GetInt64(reader.GetOrdinal("RowNo")),
+                    Department     = reader.GetString(reader.GetOrdinal("Department")),
+                    CourseType     = reader.GetString(reader.GetOrdinal("CourseType")),
+                    TotalSessions  = reader.GetInt64(reader.GetOrdinal("TotalSessions")),
+                    TotalEnrolled  = reader.GetInt64(reader.GetOrdinal("TotalEnrolled")),
+                    TotalPresent   = reader.GetInt64(reader.GetOrdinal("TotalPresent")),
+                    AttendancePct  = reader.IsDBNull(reader.GetOrdinal("AttendancePct")) ? 0 : reader.GetDecimal(reader.GetOrdinal("AttendancePct"))
                 });
             }
-
-            return result;
         }
         finally
         {
             await _context.Database.CloseConnectionAsync();
         }
+
+        return result;
     }
 }

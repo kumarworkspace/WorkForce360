@@ -7,6 +7,7 @@
 @implements IDisposable
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IUserService UserService
+@inject IRoleService RoleService
 @inject IAuthorizationHelper AuthorizationHelper
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
@@ -54,12 +55,10 @@
                           Variant="Variant.Outlined"
                           Clearable="true"
                           T="string">
-                    <MudSelectItem Value="@("Super Admin")">Super Admin</MudSelectItem>
-                    <MudSelectItem Value="@("HR Admin")">HR Admin</MudSelectItem>
-                    <MudSelectItem Value="@("Manager")">Manager</MudSelectItem>
-                    <MudSelectItem Value="@("Trainer")">Trainer</MudSelectItem>
-                    <MudSelectItem Value="@("Staff")">Staff</MudSelectItem>
-                    <MudSelectItem Value="@("IT Admin")">IT Admin</MudSelectItem>
+                    @foreach (var role in _roles)
+                    {
+                        <MudSelectItem Value="@role.RoleName">@role.RoleName</MudSelectItem>
+                    }
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
@@ -147,6 +146,11 @@
                                           Size="Size.Small"
                                           Title="Edit"
                                           OnClick="@(() => EditUser(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Lock"
+                                          Color="Color.Warning"
+                                          Size="Size.Small"
+                                          Title="Change Password"
+                                          OnClick="@(() => OpenChangePasswordDialog(context))" />
                         }
                         @if (_accessLevel >= 3)
                         {
@@ -194,6 +198,7 @@
     private int _pageSize = 10;
     private string? _searchTerm;
     private string? _selectedRole;
+    private List<RoleDto> _roles = new();
     private System.Threading.Timer? _searchDebounceTimer;
 
     protected override async Task OnInitializedAsync()
@@ -211,6 +216,9 @@
                 _userId = uid;
 
             _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Role Management", _tenantId);
+
+            var roles = await RoleService.GetByTenantIdAsync(_tenantId);
+            _roles = roles.Where(r => r.IsActive).OrderBy(r => r.RoleName).ToList();
 
             await LoadUsersAsync();
         }
@@ -290,6 +298,19 @@
     private void NavigateToCreate()
     {
         Navigation.NavigateTo("/admin/create-user");
+    }
+
+    private async Task OpenChangePasswordDialog(UserListDto user)
+    {
+        var parameters = new DialogParameters
+        {
+            { nameof(ChangePasswordDialog.UserId), user.UserId },
+            { nameof(ChangePasswordDialog.UserName), $"{user.FullName} ({user.Email})" },
+            { nameof(ChangePasswordDialog.TenantId), _tenantId },
+            { nameof(ChangePasswordDialog.AdminUserId), _userId }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<ChangePasswordDialog>("Change Password", parameters, options);
     }
 
     private async Task ViewUser(int userId)

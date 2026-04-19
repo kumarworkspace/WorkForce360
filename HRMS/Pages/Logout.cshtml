@@ -2,10 +2,29 @@
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
 @using Microsoft.AspNetCore.Authentication.OpenIdConnect
+@using HRMS.Core.Domain.Entities
+@using HRMS.Core.Domain.Enums
 @inject ILoggerFactory LoggerFactory
+@inject HRMS.Core.Domain.Interfaces.IUnitOfWork UnitOfWork
 @{
     const string SignInPath = "/signin";
     var logger = LoggerFactory.CreateLogger("Logout");
+
+    // Capture user info before sign-out
+    int? logoutUserId = null;
+    int? logoutTenantId = null;
+    string? logoutUserName = null;
+    string? logoutEmail = null;
+
+    if (HttpContext.User.Identity?.IsAuthenticated == true)
+    {
+        var userIdClaim = HttpContext.User.FindFirst("UserId")?.Value;
+        var tenantIdClaim = HttpContext.User.FindFirst("TenantId")?.Value;
+        logoutUserName = HttpContext.User.FindFirst("FullName")?.Value;
+        logoutEmail = HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        if (int.TryParse(userIdClaim, out var uid)) logoutUserId = uid;
+        if (int.TryParse(tenantIdClaim, out var tid)) logoutTenantId = tid;
+    }
 
     try
     {
@@ -16,6 +35,35 @@
     catch (Exception ex)
     {
         logger.LogError(ex, "Logout error");
+    }
+
+    // Audit log: Logout
+    if (logoutUserId.HasValue && logoutTenantId.HasValue)
+    {
+        try
+        {
+            var ipAddress = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                ?? HttpContext.Request.Headers["X-Real-IP"].FirstOrDefault()
+                ?? HttpContext.Connection.RemoteIpAddress?.ToString();
+
+            await UnitOfWork.AuditLogs.AddAsync(new AuditLog
+            {
+                TenantId = logoutTenantId.Value,
+                UserId = logoutUserId.Value,
+                ActionType = ActionType.Logout,
+                Module = "Authentication",
+                Description = $"User '{logoutUserName}' ({logoutEmail}) logged out.",
+                IPAddress = ipAddress,
+                IsActive = true,
+                CreatedBy = logoutUserId.Value,
+                CreatedDate = DateTime.UtcNow
+            });
+            await UnitOfWork.SaveChangesAsync();
+        }
+        catch (Exception auditEx)
+        {
+            logger.LogWarning(auditEx, "Failed to write logout audit log");
+        }
     }
 
     Response.Redirect(SignInPath);

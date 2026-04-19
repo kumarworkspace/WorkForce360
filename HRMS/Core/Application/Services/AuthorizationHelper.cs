@@ -34,9 +34,10 @@ public class AuthorizationHelper : IAuthorizationHelper
         { "/hrms/leave/types",           "Leave Configuration" },
         { "/hrms/leave/holidays",        "Leave Configuration" },
 
-        // My Training — staff-facing my courses page
+        // My Training — staff-facing my courses page + attendance marking
         { "/tms/my-courses",             "My Training" },
         { "/tms/my-planning",            "My Training" },
+        { "/tms/attendance/mark",        "My Training" },
 
         // Course Management — trainer/admin TMS pages
         { "/tms/courses",                "Course Management" },
@@ -44,10 +45,14 @@ public class AuthorizationHelper : IAuthorizationHelper
         { "/tms/courses/edit",           "Course Management" },
         { "/tms/planning",               "Course Management" },
         { "/tms/planning/create",        "Course Management" },
-        { "/tms/planning/view",          "Course Management" },
         { "/tms/planning/edit",          "Course Management" },
         { "/tms/attendance",             "Course Management" },
-        { "/tms/reports",               "Course Management" },
+        { "/tms/dashboard",              "Course Management" },
+
+        // TMS Reports
+        { "/tms/reports/general",       "TMS Reports" },
+        { "/tms/reports/trainer-kpi",   "TMS Reports" },
+        { "/tms/reports/statistics",    "TMS Reports" },
 
         // Admin
         { "/admin/users",                "Role Management" },
@@ -96,14 +101,23 @@ public class AuthorizationHelper : IAuthorizationHelper
     {
         try
         {
+            var cleanPath = pagePath.Split('?')[0].Split('#')[0].ToLower();
+
+            // Only check DB permissions for explicitly protected paths.
+            // Unprotected paths (dashboard, profile, etc.) are always accessible.
+            var isProtected = PageToModuleMap.ContainsKey(cleanPath)
+                || PageToModuleMap.Keys.Any(k => cleanPath.StartsWith(k.ToLower(), StringComparison.OrdinalIgnoreCase));
+
+            if (!isProtected) return true;
+
             var moduleName = GetModuleNameFromPath(pagePath);
             var accessLevel = await _accessControlService.GetAccessLevelAsync(userId, moduleName, tenantId);
-            return accessLevel > 0; // Any access level > 0 means user has access
+            return accessLevel > 0;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking page access for user {UserId}, path {Path}, tenant {TenantId}", userId, pagePath, tenantId);
-            return false; // Deny access on error
+            return false;
         }
     }
 

@@ -8,6 +8,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ICoursePlanningService CoursePlanningService
 @inject ICourseAttendanceService CourseAttendanceService
+@inject IAuthorizationHelper AuthorizationHelper
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject ILogger<CoursePlanningView> Logger
@@ -291,8 +292,8 @@ else
             if (int.TryParse(tenantIdClaim, out var tenantId))
                 _tenantId = tenantId;
 
-            var role = _user.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
-            _canManageParticipants = role == "Super Admin" || role == "Trainer";
+            var accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Course Management", _tenantId);
+            _canManageParticipants = accessLevel >= 2;
         }
 
         await LoadCoursePlan();

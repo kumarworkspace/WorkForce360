@@ -62,19 +62,19 @@
     <!-- Search and Filters -->
     <MudPaper Class="pa-4 mb-4" Elevation="2" Style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 8px;">
         <MudGrid Spacing="3">
-            <MudItem xs="12" md="4">
-                <MudTextField Value="@_searchTerm" 
+            <MudItem xs="12" md="3">
+                <MudTextField Value="@_searchTerm"
                              ValueChanged="@OnSearchChangedCallback"
-                             Label="Search by Description, IP Address" 
+                             Label="Search by Description, Module, IP"
                              Variant="Variant.Outlined"
                              Adornment="Adornment.Start"
                              AdornmentIcon="@Icons.Material.Filled.Search"
                              Immediate="true" />
             </MudItem>
-            <MudItem xs="12" md="3">
-                <MudSelect Value="@_selectedActionType" 
+            <MudItem xs="12" md="2">
+                <MudSelect Value="@_selectedActionType"
                           ValueChanged="@OnActionTypeChangedCallback"
-                          Label="Filter by Action Type" 
+                          Label="Action Type"
                           Variant="Variant.Outlined"
                           Clearable="true"
                           T="string">
@@ -84,23 +84,43 @@
                     <MudSelectItem Value="@("View")">View</MudSelectItem>
                     <MudSelectItem Value="@("Approve")">Approve</MudSelectItem>
                     <MudSelectItem Value="@("Reject")">Reject</MudSelectItem>
+                    <MudSelectItem Value="@("Login")">Login</MudSelectItem>
+                    <MudSelectItem Value="@("Logout")">Logout</MudSelectItem>
+                    <MudSelectItem Value="@("AccessDenied")">Access Denied</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudDatePicker Label="Start Date" 
+                <MudSelect Value="@_selectedModule"
+                          ValueChanged="@OnModuleChangedCallback"
+                          Label="Module"
+                          Variant="Variant.Outlined"
+                          Clearable="true"
+                          T="string">
+                    <MudSelectItem Value="@("Authentication")">Authentication</MudSelectItem>
+                    <MudSelectItem Value="@("User Management")">User Management</MudSelectItem>
+                    <MudSelectItem Value="@("Role Management")">Role Management</MudSelectItem>
+                    <MudSelectItem Value="@("Access Control")">Access Control</MudSelectItem>
+                    <MudSelectItem Value="@("Staff")">Staff</MudSelectItem>
+                    <MudSelectItem Value="@("Leave")">Leave</MudSelectItem>
+                    <MudSelectItem Value="@("Training")">Training</MudSelectItem>
+                    <MudSelectItem Value="@("Attendance")">Attendance</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudDatePicker Label="Start Date"
                               Date="@_startDate"
                               DateChanged="@OnStartDateChanged"
                               Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudDatePicker Label="End Date" 
+                <MudDatePicker Label="End Date"
                               Date="@_endDate"
                               DateChanged="@OnEndDateChanged"
                               Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12" md="1">
-                <MudButton Variant="Variant.Outlined" 
-                          Color="Color.Error" 
+                <MudButton Variant="Variant.Outlined"
+                          Color="Color.Error"
                           OnClick="ClearFilters"
                           FullWidth="true"
                           Style="margin-top: 4px;">
@@ -129,6 +149,7 @@
                     <MudTh>User</MudTh>
                     <MudTh>Role</MudTh>
                     <MudTh>Action Type</MudTh>
+                    <MudTh>Module</MudTh>
                     <MudTh>Description</MudTh>
                     <MudTh>IP Address</MudTh>
                     <MudTh>Created By</MudTh>
@@ -163,11 +184,22 @@
                         }
                     </MudTd>
                     <MudTd DataLabel="Action Type">
-                        <MudChip T="string" 
-                                Size="Size.Small" 
+                        <MudChip T="string"
+                                Size="Size.Small"
                                 Color="@GetActionTypeColor(context.ActionType)">
+                            <MudIcon Icon="@GetActionIcon(context.ActionType)" Size="Size.Small" Class="mr-1" />
                             @context.ActionType
                         </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Module">
+                        @if (!string.IsNullOrEmpty(context.Module))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@context.Module</MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">-</MudText>
+                        }
                     </MudTd>
                     <MudTd DataLabel="Description">
                         <MudText Typo="Typo.body2" Style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" 
@@ -229,6 +261,7 @@
     // Filters
     private string? _searchTerm;
     private string? _selectedActionType;
+    private string? _selectedModule;
     private DateTime? _startDate;
     private DateTime? _endDate;
     
@@ -269,10 +302,10 @@
         try
         {
             _isLoading = true;
-            _pagedResult = await AuditLogService.GetPagedAsync(_tenantId, _pageNumber, _pageSize, _searchTerm, _selectedActionType, _startDate, _endDate);
+            _pagedResult = await AuditLogService.GetPagedAsync(_tenantId, _pageNumber, _pageSize, _searchTerm, _selectedActionType, _startDate, _endDate, _selectedModule);
 
             // Build action stats from current page (load full stats separately)
-            if (_pagedResult != null && string.IsNullOrEmpty(_searchTerm) && string.IsNullOrEmpty(_selectedActionType) && !_startDate.HasValue && !_endDate.HasValue)
+            if (_pagedResult != null && string.IsNullOrEmpty(_searchTerm) && string.IsNullOrEmpty(_selectedActionType) && !_startDate.HasValue && !_endDate.HasValue && string.IsNullOrEmpty(_selectedModule))
             {
                 var allLogs = await AuditLogService.GetPagedAsync(_tenantId, 1, 1000, null, null, null, null);
                 _actionStats = allLogs.Items
@@ -332,6 +365,15 @@
 
     private EventCallback<string?> OnActionTypeChangedCallback => EventCallback.Factory.Create<string?>(this, OnActionTypeChanged);
 
+    private async Task OnModuleChanged(string? value)
+    {
+        _selectedModule = value;
+        _pageNumber = 1;
+        await LoadAuditLogsAsync();
+    }
+
+    private EventCallback<string?> OnModuleChangedCallback => EventCallback.Factory.Create<string?>(this, OnModuleChanged);
+
     private async Task OnStartDateChanged(DateTime? date)
     {
         _startDate = date;
@@ -350,6 +392,7 @@
     {
         _searchTerm = null;
         _selectedActionType = null;
+        _selectedModule = null;
         _startDate = null;
         _endDate = null;
         _pageNumber = 1;
@@ -366,6 +409,9 @@
             "View" => Color.Default,
             "Approve" => Color.Success,
             "Reject" => Color.Warning,
+            "Login" => Color.Tertiary,
+            "Logout" => Color.Secondary,
+            "AccessDenied" => Color.Error,
             _ => Color.Default
         };
     }
@@ -380,13 +426,16 @@
             "View" => Icons.Material.Filled.Visibility,
             "Approve" => Icons.Material.Filled.CheckCircle,
             "Reject" => Icons.Material.Filled.Cancel,
+            "Login" => Icons.Material.Filled.Login,
+            "Logout" => Icons.Material.Filled.Logout,
+            "AccessDenied" => Icons.Material.Filled.Block,
             _ => Icons.Material.Filled.Info
         };
     }
 
     private async Task<List<AuditLogDto>> GetAllFilteredLogsAsync()
     {
-        var all = await AuditLogService.GetPagedAsync(_tenantId, 1, 10000, _searchTerm, _selectedActionType, _startDate, _endDate);
+        var all = await AuditLogService.GetPagedAsync(_tenantId, 1, 10000, _searchTerm, _selectedActionType, _startDate, _endDate, _selectedModule);
         return all.Items.ToList();
     }
 
@@ -408,9 +457,10 @@
             sheet.Cell(1, 3).Value = "Email";
             sheet.Cell(1, 4).Value = "Role";
             sheet.Cell(1, 5).Value = "Action Type";
-            sheet.Cell(1, 6).Value = "Description";
-            sheet.Cell(1, 7).Value = "IP Address";
-            sheet.Cell(1, 8).Value = "Created By";
+            sheet.Cell(1, 6).Value = "Module";
+            sheet.Cell(1, 7).Value = "Description";
+            sheet.Cell(1, 8).Value = "IP Address";
+            sheet.Cell(1, 9).Value = "Created By";
 
             var headerRow = sheet.Row(1);
             headerRow.Style.Font.Bold = true;
@@ -427,9 +477,10 @@
                 sheet.Cell(row, 3).Value = log.UserEmail ?? "-";
                 sheet.Cell(row, 4).Value = log.UserRole ?? "-";
                 sheet.Cell(row, 5).Value = log.ActionType;
-                sheet.Cell(row, 6).Value = log.Description;
-                sheet.Cell(row, 7).Value = log.IPAddress ?? "-";
-                sheet.Cell(row, 8).Value = log.CreatedByName ?? "-";
+                sheet.Cell(row, 6).Value = log.Module ?? "-";
+                sheet.Cell(row, 7).Value = log.Description;
+                sheet.Cell(row, 8).Value = log.IPAddress ?? "-";
+                sheet.Cell(row, 9).Value = log.CreatedByName ?? "-";
             }
 
             sheet.Columns().AdjustToContents();

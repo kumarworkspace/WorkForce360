@@ -11,6 +11,7 @@
 @inject IHolidayMasterService HolidayMasterService
 @inject NavigationManager Navigation
 @inject IUserService UserService
+@inject IAuthorizationHelper AuthorizationHelper
 @inject ISnackbar Snackbar
 @inject ILogger<Dashboard> Logger
 
@@ -23,19 +24,19 @@
     }
     else
     {
-        @if (_userRole == "Staff")
+        @if (_hrAccessLevel >= 2)
         {
-            <StaffDashboard 
+            <HRDashboard
                 TenantId="@_tenantId"
-                StaffId="@_staffId"
+                StaffService="@StaffService"
                 LeaveOtService="@LeaveOtService"
                 HolidayMasterService="@HolidayMasterService" />
         }
-        else if (_userRole == "HR Admin" || _userRole == "Super Admin")
+        else if (_staffId.HasValue)
         {
-            <HRDashboard 
+            <StaffDashboard
                 TenantId="@_tenantId"
-                StaffService="@StaffService"
+                StaffId="@_staffId"
                 LeaveOtService="@LeaveOtService"
                 HolidayMasterService="@HolidayMasterService" />
         }
@@ -55,7 +56,7 @@
     private int _tenantId;
     private int _userId;
     private int? _staffId;
-    private string _userRole = string.Empty;
+    private int _hrAccessLevel;
 
     protected override async Task OnInitializedAsync()
     {
@@ -72,7 +73,6 @@
 
             var tenantIdClaim = user.FindFirst("TenantId")?.Value;
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
 
             if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
             {
@@ -82,7 +82,7 @@
 
             _tenantId = int.Parse(tenantIdClaim);
             _userId = int.Parse(userIdClaim);
-            _userRole = roleClaim ?? string.Empty;
+            _hrAccessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, HRMS.Core.Application.AppConstants.Modules.EmployeeManagement, _tenantId);
 
             // Get user's staff ID
             try

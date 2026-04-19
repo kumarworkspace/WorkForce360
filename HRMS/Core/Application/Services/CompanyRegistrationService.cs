@@ -1,3 +1,4 @@
+using HRMS.Core.Application;
 using HRMS.Core.Application.DTOs;
 using HRMS.Core.Application.Interfaces;
 using HRMS.Core.Domain.Entities;
@@ -112,7 +113,7 @@ public class CompanyRegistrationService : ICompanyRegistrationService
             {
                 // Get the "Super Admin" role for this tenant
                 var allRoles = await _unitOfWork.Role.GetByTenantIdAsync(tenant.TenantId, includeInactive: true);
-                var superAdminRole = allRoles.FirstOrDefault(r => r.RoleName.Equals("Super Admin", StringComparison.OrdinalIgnoreCase));
+                var superAdminRole = allRoles.FirstOrDefault(r => r.RoleName.Equals(AppConstants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
                 
                 if (superAdminRole != null)
                 {
@@ -130,7 +131,7 @@ public class CompanyRegistrationService : ICompanyRegistrationService
                     await _unitOfWork.UserRole.AddAsync(userRole);
                     
                     // Update user's Role field to "Super Admin"
-                    user.Role = "Super Admin";
+                    user.Role = AppConstants.Roles.SuperAdmin;
                     await _userRepository.UpdateAsync(user);
                     
                     await _unitOfWork.SaveChangesAsync();

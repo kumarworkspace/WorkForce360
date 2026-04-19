@@ -277,6 +277,17 @@ else
                                                 <th style="background-color: #1a237e; color: white; text-align: center; min-width: 80px;">
                                                     <div>@date.ToString("dd MMM")</div>
                                                     <div style="font-size: 0.75rem; opacity: 0.8;">@date.ToString("ddd")</div>
+                                                    @if (_canMarkAttendance && _attendanceGrid.Any())
+                                                    {
+                                                        <MudTooltip Text="Select All">
+                                                            <MudCheckBox T="bool?"
+                                                                        Value="@GetSelectAllState(date)"
+                                                                        ValueChanged="@((bool? val) => ToggleSelectAll(date, val == true))"
+                                                                        Color="Color.Warning"
+                                                                        Dense="true"
+                                                                        Style="margin-top: 2px;" />
+                                                        </MudTooltip>
+                                                    }
                                                 </th>
                                             }
                                             <th style="background-color: #1a237e; color: white; text-align: center; min-width: 60px;">Total</th>
@@ -302,8 +313,8 @@ else
                                                 {
                                                     <td style="text-align: center;">
                                                         <MudCheckBox T="bool"
-                                                                    Checked="@participant.AttendanceByDate.GetValueOrDefault(date, false)"
-                                                                    CheckedChanged="@((bool val) => UpdateAttendance(participant.StaffId, date, val))"
+                                                                    Value="@participant.AttendanceByDate.GetValueOrDefault(date.ToString("yyyy-MM-dd"), false)"
+                                                                    ValueChanged="@((bool val) => UpdateAttendance(participant.StaffId, date, val))"
                                                                     Color="Color.Success"
                                                                     Dense="true"
                                                                     Disabled="@(!_canMarkAttendance)" />
@@ -498,13 +509,10 @@ else
     private int _tenantId;
     private int _userId;
     private int _accessLevel = 0;
-    private string _userRole = string.Empty;
     private ClaimsPrincipal? _user;
 
-    // Trainers, Super Admins, and anyone with Course Management access (level >= 1) can mark attendance manually
-    private bool _canMarkAttendance => _userRole == "Super Admin" || _userRole == "Trainer" || _accessLevel >= 1;
-    // Trainers, Super Admins, and anyone with level >= 2 can enter/update results
-    private bool _canEditResults => _userRole == "Super Admin" || _userRole == "Trainer" || _accessLevel >= 2;
+    private bool _canMarkAttendance => _accessLevel >= 1;
+    private bool _canEditResults    => _accessLevel >= 2;
 
     protected override async Task OnInitializedAsync()
     {
@@ -522,7 +530,6 @@ else
             if (int.TryParse(tenantIdClaim, out var tenantId))
                 _tenantId = tenantId;
 
-            _userRole = _user.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
         }
 
         await LoadCourseData();
@@ -541,9 +548,12 @@ else
 
             if (_courseDetail != null)
             {
-                // Generate date range
-                _dateRange = Enumerable.Range(0, (_courseDetail.EndDate.Date - _courseDetail.StartDate.Date).Days + 1)
-                    .Select(offset => _courseDetail.StartDate.Date.AddDays(offset))
+                // Normalize to plain dates (Kind=Unspecified, time=midnight) so they
+                // match the normalized keys in AttendanceGridDto.AttendanceByDate exactly.
+                var startDate = new DateTime(_courseDetail.StartDate.Year, _courseDetail.StartDate.Month, _courseDetail.StartDate.Day);
+                var endDate   = new DateTime(_courseDetail.EndDate.Year,   _courseDetail.EndDate.Month,   _courseDetail.EndDate.Day);
+                _dateRange = Enumerable.Range(0, (endDate - startDate).Days + 1)
+                    .Select(offset => startDate.AddDays(offset))
                     .ToList();
             }
         }
@@ -681,7 +691,7 @@ else
                     StaffId = p.StaffId,
                     StaffName = p.StaffName,
                     EmployeeCode = p.EmployeeCode,
-                    AttendanceByDate = _dateRange.ToDictionary(d => d.Date, _ => false),
+                    AttendanceByDate = _dateRange.ToDictionary(d => d.ToString("yyyy-MM-dd"), _ => false),
                     TotalDays = _dateRange.Count,
                     PresentDays = 0,
                     AttendancePercentage = 0
@@ -709,7 +719,7 @@ else
         var participant = _attendanceGrid.FirstOrDefault(p => p.StaffId == staffId);
         if (participant != null)
         {
-            participant.AttendanceByDate[date] = isPresent;
+            participant.AttendanceByDate[date.ToString("yyyy-MM-dd")] = isPresent;
             participant.PresentDays = participant.AttendanceByDate.Count(kvp => kvp.Value);
             participant.AttendancePercentage = participant.TotalDays > 0
                 ? Math.Round((decimal)participant.PresentDays / participant.TotalDays * 100, 2)
@@ -721,6 +731,32 @@ else
 
             StateHasChanged();
         }
+    }
+
+    private bool? GetSelectAllState(DateTime date)
+    {
+        if (!_attendanceGrid.Any()) return false;
+        var dateKey = date.ToString("yyyy-MM-dd");
+        var states = _attendanceGrid.Select(p => p.AttendanceByDate.GetValueOrDefault(dateKey, false)).ToList();
+        if (states.All(s => s)) return true;
+        if (states.All(s => !s)) return false;
+        return null; // indeterminate — some checked, some not
+    }
+
+    private void ToggleSelectAll(DateTime date, bool value)
+    {
+        var dateKey = date.ToString("yyyy-MM-dd");
+        foreach (var participant in _attendanceGrid)
+        {
+            participant.AttendanceByDate[dateKey] = value;
+            participant.PresentDays = participant.AttendanceByDate.Count(kvp => kvp.Value);
+            participant.AttendancePercentage = participant.TotalDays > 0
+                ? Math.Round((decimal)participant.PresentDays / participant.TotalDays * 100, 2)
+                : 0;
+            _pendingChanges.Add((participant.StaffId, date));
+        }
+        _hasUnsavedChanges = _pendingChanges.Any();
+        StateHasChanged();
     }
 
     private async Task SaveCurrentAttendance()
@@ -746,7 +782,7 @@ else
                     .Select(p => new AttendanceItemRequest
                     {
                         StaffId = p.StaffId,
-                        IsPresent = p.AttendanceByDate.GetValueOrDefault(date, false),
+                        IsPresent = p.AttendanceByDate.GetValueOrDefault(date.ToString("yyyy-MM-dd"), false),
                         Remarks = null
                     })
                     .ToList();

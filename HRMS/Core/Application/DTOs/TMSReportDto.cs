@@ -1,66 +1,130 @@
 namespace HRMS.Core.Application.DTOs;
 
-// ─── Filter ──────────────────────────────────────────────────────────────────
+// ─── Filters ─────────────────────────────────────────────────────────────────
 
-public class TMSReportFilter
+public class GeneralReportFilter
 {
     public int TenantId { get; set; }
     public DateTime? FromDate { get; set; }
     public DateTime? ToDate { get; set; }
-    public int? TrainerId { get; set; }
     public int? CourseId { get; set; }
+    public int? TrainerId { get; set; }
+    public string? Department { get; set; }
+    public string? Company { get; set; }
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
 }
 
-// ─── Overall Summary ──────────────────────────────────────────────────────────
-
-public class TMSOverallSummaryDto
+public class TrainerKPIFilter
 {
-    public int TotalCourses { get; set; }
-    public int TotalSessions { get; set; }
-    public int TotalParticipantsEnrolled { get; set; }
-    public int TotalPresent { get; set; }
-    public decimal AvgAttendancePercentage { get; set; }
-    public int CoursesCompleted { get; set; }
-    public int CoursesOngoing { get; set; }
-    public int CoursesUpcoming { get; set; }
+    public int TenantId { get; set; }
+    public int? Year { get; set; }
+    public int? Month { get; set; }
+    public DateTime? FromDate { get; set; }
+    public DateTime? ToDate { get; set; }
+    public int? TrainerId { get; set; }
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
 }
 
-// ─── Monthly / Yearly Summary ─────────────────────────────────────────────────
-
-public class TMSMonthlySummaryDto
+public class StatisticsFilter
 {
-    public int Year { get; set; }
-    public int Month { get; set; }
-    public string MonthName { get; set; } = string.Empty;
-    public int TotalSessions { get; set; }
-    public int TotalParticipants { get; set; }
-    public int TotalPresent { get; set; }
-    public decimal AvgAttendancePercentage { get; set; }
+    public int TenantId { get; set; }
+    public string? Department { get; set; }
+    public string? Company { get; set; }
+    public int? Year { get; set; }
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
 }
 
-// ─── Trainer Performance ──────────────────────────────────────────────────────
+// ─── General Report ──────────────────────────────────────────────────────────
 
-public class TMSTrainerPerformanceDto
+public class GeneralReportSummaryDto
 {
+    public long TotalClasses { get; set; }
+    public long TotalStaffAttended { get; set; }
+    public decimal TotalHours { get; set; }
+}
+
+public class GeneralReportRowDto
+{
+    public long RowNo { get; set; }
+    public int CoursePlanId { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+    public TimeSpan StartTime { get; set; }
+    public TimeSpan EndTime { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? CourseCode { get; set; }
+    public string? CourseType { get; set; }
+    public decimal TotalHours { get; set; }
+    public string TrainerName { get; set; } = string.Empty;
+    public string? Venue { get; set; }
+    public long TotalStaffAttended { get; set; }
+
+    public string TimeRange => $"{StartTime:hh\\:mm} - {EndTime:hh\\:mm} Hrs";
+}
+
+public class GeneralReportResultDto
+{
+    public GeneralReportSummaryDto Summary { get; set; } = new();
+    public long TotalCount { get; set; }
+    public List<GeneralReportRowDto> Rows { get; set; } = new();
+}
+
+// ─── Trainer KPI Report ──────────────────────────────────────────────────────
+
+public class TrainerKPISummaryDto
+{
+    public long TotalClasses { get; set; }
+    public decimal TotalHours { get; set; }
+}
+
+public class TrainerKPIRowDto
+{
+    public long RowNo { get; set; }
     public int StaffId { get; set; }
     public string TrainerName { get; set; } = string.Empty;
     public string? EmployeeCode { get; set; }
     public string? Department { get; set; }
-    public int TotalCoursesConducted { get; set; }
-    public int TotalParticipantsTrained { get; set; }
-    public decimal AvgAttendancePercentage { get; set; }
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public string MonthName { get; set; } = string.Empty;
+    public long NumClasses { get; set; }
+    public decimal TotalHours { get; set; }
 }
 
-// ─── Course-wise Report ───────────────────────────────────────────────────────
-
-public class TMSCourseWiseReportDto
+public class TrainerKPIResultDto
 {
-    public int CourseId { get; set; }
-    public string CourseTitle { get; set; } = string.Empty;
-    public string? CourseCode { get; set; }
-    public string? Category { get; set; }
-    public int TotalSessions { get; set; }
-    public int TotalParticipantsEnrolled { get; set; }
-    public int TotalPresent { get; set; }
-    public decimal AvgAttendancePercentage { get; set; }
+    public TrainerKPISummaryDto Summary { get; set; } = new();
+    public long TotalCount { get; set; }
+    public List<TrainerKPIRowDto> Rows { get; set; } = new();
+}
+
+// ─── Statistics Report ───────────────────────────────────────────────────────
+
+public class StatisticsSummaryDto
+{
+    public long TotalSessions { get; set; }
+    public long TotalEnrolled { get; set; }
+    public long TotalPresent { get; set; }
+    public decimal AttendancePct { get; set; }
+}
+
+public class StatisticsRowDto
+{
+    public long RowNo { get; set; }
+    public string Department { get; set; } = string.Empty;
+    public string CourseType { get; set; } = string.Empty;
+    public long TotalSessions { get; set; }
+    public long TotalEnrolled { get; set; }
+    public long TotalPresent { get; set; }
+    public decimal AttendancePct { get; set; }
+}
+
+public class StatisticsResultDto
+{
+    public StatisticsSummaryDto Summary { get; set; } = new();
+    public long TotalCount { get; set; }
+    public List<StatisticsRowDto> Rows { get; set; } = new();
 }

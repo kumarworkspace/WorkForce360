@@ -7,5 +7,8 @@ public enum ActionType
     Delete,
     View,
     Approve,
-    Reject
+    Reject,
+    Login,
+    Logout,
+    AccessDenied
 }

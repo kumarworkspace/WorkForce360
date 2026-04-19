@@ -9,6 +9,8 @@ public class AuditLogDto
     public string? UserEmail { get; set; }
     public string? UserRole { get; set; }
     public string ActionType { get; set; } = string.Empty;
+    public string? Module { get; set; }
+    public int? RecordId { get; set; }
     public string? Description { get; set; }
     public string? IPAddress { get; set; }
     public DateTime CreatedDate { get; set; }

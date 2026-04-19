@@ -249,7 +249,6 @@
 
         var tenantIdClaim = user.FindFirst("TenantId")?.Value;
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
 
         if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
         {
@@ -262,11 +261,8 @@
 
         _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Course Management", _tenantId);
 
-        // Determine role-based filtering
-        // If user is a Trainer (not Super Admin), apply role-based filtering to show:
-        // 1. Courses created by the trainer (CreatedBy = userId)
-        // 2. Courses assigned to the trainer (TrainerId = staffId)
-        if (roleClaim != "Super Admin")
+        // Full Access (3) = see all courses; lower access = see only own courses
+        if (_accessLevel < 3)
         {
             _createdBy = _userId;
 

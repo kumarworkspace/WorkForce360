@@ -218,7 +218,6 @@
 
             var tenantIdClaim = user.FindFirst("TenantId")?.Value;
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
 
             if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
             {
@@ -229,9 +228,10 @@
 
             _tenantId = int.Parse(tenantIdClaim);
             _userId = int.Parse(userIdClaim);
-            _isHR = roleClaim == "HR Admin" || roleClaim == "Super Admin";
 
             _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Leave Approval", _tenantId);
+            // HR role determined by Leave Configuration access (HR Admin has it; Managers do not)
+            _isHR = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Leave Configuration", _tenantId) > 0;
 
             // Get user's staff ID - this is required for managers to see their direct reports' requests
             var userEntity = await UserService.GetByIdAsync(_userId, _tenantId);

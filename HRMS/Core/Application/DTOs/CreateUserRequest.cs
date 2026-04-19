@@ -43,7 +43,9 @@ public class UpdateUserRequest
     public bool IsActive { get; set; } = true;
 }
 
-
-
-
+public class ChangePasswordRequest
+{
+    public int UserId { get; set; }
+    public string NewPassword { get; set; } = string.Empty;
+}
 

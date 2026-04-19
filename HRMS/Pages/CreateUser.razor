@@ -1,4 +1,5 @@
 @page "/admin/create-user"
+@page "/admin/create-user/{UserId:int}"
 @layout MainLayout
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
@@ -7,18 +8,19 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IUserService UserService
 @inject IStaffService StaffService
+@inject IRoleService RoleService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject IHttpContextAccessor HttpContextAccessor
 @implements IDisposable
 
-<PageTitle>Create User</PageTitle>
+<PageTitle>@(_isEditMode ? "Edit User" : "Create User")</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
     <div class="d-flex align-center justify-space-between mb-4">
         <div>
-            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">Create User Account</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">Create user accounts for staff members</MudText>
+            <MudText Typo="Typo.h4" Style="font-weight: 600; color: #1a237e; margin-bottom: 4px;">@(_isEditMode ? "Edit User Account" : "Create User Account")</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@(_isEditMode ? "Update user role" : "Create user accounts for staff members")</MudText>
         </div>
         <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="NavigateBack">
             Back
@@ -28,30 +30,61 @@
     <MudPaper Elevation="2" Class="pa-4" Style="border-radius: 8px;">
         <MudForm @ref="form" @bind-IsValid="@isValid">
             <MudGrid Spacing="3">
-                <!-- Staff Selection -->
-                <MudItem xs="12">
-                    <MudAutocomplete T="StaffListDto"
-                                   Value="@selectedStaff"
-                                   ValueChanged="OnStaffSelected"
-                                   SearchFunc="@SearchStaff"
-                                   Label="Select Staff *"
-                                   Variant="Variant.Outlined"
-                                   ToStringFunc="@(staff => staff != null ? $"{staff.Name} ({staff.Email}) - {staff.Department}" : string.Empty)"
-                                   ResetValueOnEmptyText="true"
-                                   Required="true"
-                                   RequiredError="Please select a staff member">
-                        <ItemTemplate>
-                            <div style="padding: 8px;">
-                                <MudText Typo="Typo.body1" Style="font-weight: 500;">@context.Name</MudText>
-                                <MudText Typo="Typo.body2" Color="Color.Secondary">@context.Email - @context.Department</MudText>
-                            </div>
-                        </ItemTemplate>
-                    </MudAutocomplete>
-                </MudItem>
-
-                @if (selectedStaff != null)
+                @if (_isEditMode)
                 {
-                        <!-- Email -->
+                    <!-- Edit Mode: Show user info read-only -->
+                    <MudItem xs="12">
+                        <MudPaper Elevation="0" Class="pa-3" Style="background-color: #f5f5f5; border-radius: 4px;">
+                            <MudText Typo="Typo.body2" Style="font-weight: 500;">Current User Information:</MudText>
+                            <MudText Typo="Typo.body2">Name: <strong>@_existingUser?.FullName</strong></MudText>
+                            <MudText Typo="Typo.body2">Email: <strong>@_existingUser?.Email</strong></MudText>
+                            <MudText Typo="Typo.body2">Current Role: <strong>@_existingUser?.Role</strong></MudText>
+                        </MudPaper>
+                    </MudItem>
+
+                    <!-- Role Selection (only editable field in edit mode) -->
+                    <MudItem xs="12">
+                        <MudSelect @bind-Value="@selectedRole"
+                                  Label="Role *"
+                                  Variant="Variant.Outlined"
+                                  T="string"
+                                  Required="true"
+                                  RequiredError="Please select a role">
+                            @foreach (var role in _roles)
+                            {
+                                <MudSelectItem Value="@role.RoleName">@role.RoleName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
+                else
+                {
+                    <!-- Create Mode -->
+                    <!-- Staff Selection -->
+                    <MudItem xs="12">
+                        <MudAutocomplete T="StaffListDto"
+                                       Value="@selectedStaff"
+                                       ValueChanged="OnStaffSelected"
+                                       SearchFunc="@SearchStaff"
+                                       Label="Select Staff *"
+                                       Variant="Variant.Outlined"
+                                       ToStringFunc="@(staff => staff != null ? $"{staff.Name} ({staff.Email}) - {staff.Department}" : string.Empty)"
+                                       ResetValueOnEmptyText="true"
+                                       Required="true"
+                                       RequiredError="Please select a staff member"
+                                       ReadOnly="@_isEditMode">
+                            <ItemTemplate>
+                                <div style="padding: 8px;">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">@context.Name</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@context.Email - @context.Department</MudText>
+                                </div>
+                            </ItemTemplate>
+                        </MudAutocomplete>
+                    </MudItem>
+
+                    @if (selectedStaff != null)
+                    {
+                        <!-- Email (read-only, auto-filled) -->
                         <MudItem xs="12">
                             <MudTextField @bind-Value="@email"
                                         Label="Email *"
@@ -59,7 +92,8 @@
                                         Required="true"
                                         RequiredError="Email is required"
                                         HelperText="Email will be used for login"
-                                        InputType="InputType.Email" />
+                                        InputType="InputType.Email"
+                                        ReadOnly="true" />
                         </MudItem>
 
                         <!-- Role Selection -->
@@ -70,12 +104,10 @@
                                       T="string"
                                       Required="true"
                                       RequiredError="Please select a role">
-                                <MudSelectItem Value="@("Super Admin")">Super Admin</MudSelectItem>
-                                <MudSelectItem Value="@("HR Admin")">HR Admin</MudSelectItem>
-                                <MudSelectItem Value="@("Manager")">Manager</MudSelectItem>
-                                <MudSelectItem Value="@("Trainer")">Trainer</MudSelectItem>
-                                <MudSelectItem Value="@("Staff")">Staff</MudSelectItem>
-                                <MudSelectItem Value="@("IT Admin")">IT Admin</MudSelectItem>
+                                @foreach (var role in _roles)
+                                {
+                                    <MudSelectItem Value="@role.RoleName">@role.RoleName</MudSelectItem>
+                                }
                             </MudSelect>
                         </MudItem>
 
@@ -124,6 +156,7 @@
                                 <MudText Typo="Typo.body2">Position: <strong>@selectedStaff.Position</strong></MudText>
                             </MudPaper>
                         </MudItem>
+                    }
                 }
 
                 <!-- Action Buttons -->
@@ -134,13 +167,13 @@
                         </MudButton>
                         <MudButton Variant="Variant.Filled" 
                                  Color="Color.Primary" 
-                                 OnClick="CreateUserAccount"
+                                 OnClick="@(_isEditMode ? EventCallback.Factory.Create(this, UpdateUserAccount) : EventCallback.Factory.Create(this, CreateUserAccount))"
                                  Disabled="@(isCreating || !isValid)">
                             @if (isCreating)
                             {
                                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                             }
-                            Create User
+                            @(_isEditMode ? "Update User" : "Create User")
                         </MudButton>
                     </MudStack>
                 </MudItem>
@@ -163,8 +196,15 @@
     private string passwordIcon = Icons.Material.Filled.VisibilityOff;
 
     private List<StaffListDto> _staffList = new();
+    private List<RoleDto> _roles = new();
     private int _tenantId = 0;
     private int _userId = 0;
+    private bool _isEditMode = false;
+    private int? _editUserId;
+    private UserListDto? _existingUser;
+
+    [Parameter]
+    public int? UserId { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -181,7 +221,64 @@
             if (int.TryParse(userIdClaim, out var uid))
                 _userId = uid;
 
-            await LoadAllStaff();
+            await LoadRoles();
+
+            // Check if we're in edit mode
+            var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+            if (query.TryGetValue("userId", out var userIdValue) && int.TryParse(userIdValue, out var uidParam))
+            {
+                _editUserId = uidParam;
+                _isEditMode = true;
+                await LoadUserForEdit();
+            }
+            else if (UserId.HasValue)
+            {
+                _editUserId = UserId.Value;
+                _isEditMode = true;
+                await LoadUserForEdit();
+            }
+            else
+            {
+                await LoadAllStaff();
+            }
+        }
+    }
+
+    private async Task LoadRoles()
+    {
+        try
+        {
+            var roles = await RoleService.GetByTenantIdAsync(_tenantId);
+            _roles = roles.Where(r => r.IsActive).OrderBy(r => r.RoleName).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading roles: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task LoadUserForEdit()
+    {
+        if (!_editUserId.HasValue) return;
+
+        try
+        {
+            _existingUser = await UserService.GetByIdAsync(_editUserId.Value, _tenantId);
+            if (_existingUser == null)
+            {
+                Snackbar.Add("User not found", Severity.Error);
+                Navigation.NavigateTo("/admin/users");
+                return;
+            }
+
+            selectedRole = _existingUser.Role;
+            email = _existingUser.Email;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading user: {ex.Message}", Severity.Error);
+            Navigation.NavigateTo("/admin/users");
         }
     }
 
@@ -298,6 +395,9 @@
                 autoGeneratePassword = false;
                 form?.ResetValidation();
                 StateHasChanged();
+
+                // Redirect to User Management List Page
+                Navigation.NavigateTo("/admin/users");
             }
             else
             {
@@ -308,6 +408,52 @@
         {
             var errorMessage = ex.InnerException?.Message ?? ex.Message;
             Snackbar.Add($"Error creating user: {errorMessage}", Severity.Error);
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    private async Task UpdateUserAccount()
+    {
+        if (!_editUserId.HasValue || string.IsNullOrEmpty(selectedRole))
+        {
+            Snackbar.Add("Please select a role.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            isCreating = true;
+
+            var request = new UpdateUserRequest
+            {
+                UserId = _editUserId.Value,
+                Email = email,
+                Role = selectedRole,
+                IsActive = _existingUser?.IsActive ?? true
+            };
+
+            // Get IP address for audit logging
+            var ipAddress = GetClientIpAddress();
+
+            var success = await UserService.UpdateAsync(request, _tenantId, _userId, ipAddress);
+
+            if (success)
+            {
+                Snackbar.Add("User updated successfully", Severity.Success);
+                Navigation.NavigateTo("/admin/users");
+            }
+            else
+            {
+                Snackbar.Add("Failed to update user", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            Snackbar.Add($"Error updating user: {errorMessage}", Severity.Error);
         }
         finally
         {

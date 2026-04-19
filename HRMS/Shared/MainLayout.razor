@@ -2,9 +2,11 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IServiceScopeFactory ScopeFactory
 @inject ILogger<MainLayout> Logger
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
+@implements IDisposable
 
 <MudProviderComponent />
 
@@ -47,7 +49,27 @@
         <!-- Main body content -->
         <MudMainContent Style="flex:1; overflow-y:auto;">
             <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
-                @Body
+                @if (!_accessCheckDone)
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                }
+                else if (_hasPageAccess)
+                {
+                    @Body
+                }
+                else
+                {
+                    <MudPaper Elevation="2" Class="pa-8" Style="text-align:center; max-width:500px; margin:64px auto; border-radius:12px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Large" Color="Color.Error" Style="font-size:64px;" />
+                        <MudText Typo="Typo.h5" Class="mt-3 mb-2" Style="font-weight:600;">Access Denied</MudText>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+                            You do not have permission to access this page.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => Navigation.NavigateTo("/dashboard"))">
+                            Go to Dashboard
+                        </MudButton>
+                    </MudPaper>
+                }
             </MudContainer>
         </MudMainContent>
     </MudDrawerContainer>
@@ -64,6 +86,12 @@
     private string userProfilePicture = string.Empty;
     private string userName = string.Empty;
 
+    private bool _hasPageAccess = true;
+    private bool _accessCheckDone = true;
+    private int _userId;
+    private int _tenantId;
+    private string? _userRole;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -79,6 +107,61 @@
             : GetCookieUserName(user);
 
         SetUserInitial();
+
+        int.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out _userId);
+        int.TryParse(user.FindFirst("TenantId")?.Value, out _tenantId);
+        _userRole = user.FindFirst(ClaimTypes.Role)?.Value;
+
+        Navigation.LocationChanged += OnLocationChanged;
+        await CheckCurrentPageAccessAsync();
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _accessCheckDone = false;
+        await InvokeAsync(async () =>
+        {
+            await CheckCurrentPageAccessAsync();
+            StateHasChanged();
+        });
+    }
+
+    private static readonly HashSet<string> AlwaysAllowedPaths = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "/dashboard", "/profile", "/signin", "/logout"
+    };
+
+    private async Task CheckCurrentPageAccessAsync()
+    {
+        if (_userId == 0 || _tenantId == 0)
+        {
+            _hasPageAccess = true;
+            _accessCheckDone = true;
+            return;
+        }
+
+        var path = "/" + Navigation.Uri.Replace(Navigation.BaseUri, "").TrimStart('/').Split('?')[0].TrimStart('/');
+
+        // Super Admin bypasses all access checks
+        if (string.Equals(_userRole, HRMS.Core.Application.AppConstants.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+            || AlwaysAllowedPaths.Contains(path)
+            || path == "/")
+        {
+            _hasPageAccess = true;
+            _accessCheckDone = true;
+            return;
+        }
+
+        // Always do a fresh DB check — no cache to ensure permissions reflect latest changes
+        using var scope = ScopeFactory.CreateScope();
+        var authHelper = scope.ServiceProvider.GetRequiredService<IAuthorizationHelper>();
+        _hasPageAccess = await authHelper.HasPageAccessAsync(_userId, path, _tenantId);
+        _accessCheckDone = true;
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 
     private bool IsSsoAuthentication(string? authType) =>

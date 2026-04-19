@@ -11,5 +11,6 @@ public interface IUserService
     Task<UserListDto?> GetByIdAsync(int userId, int tenantId);
     Task<bool> UpdateAsync(UpdateUserRequest request, int tenantId, int adminUserId, string? ipAddress = null);
     Task<bool> DeleteAsync(int userId, int tenantId, int adminUserId, string? ipAddress = null);
+    Task<bool> ChangePasswordAsync(int userId, string newPassword, int tenantId, int adminUserId, string? ipAddress = null);
 }
 

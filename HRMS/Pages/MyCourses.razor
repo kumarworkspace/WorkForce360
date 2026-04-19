@@ -7,6 +7,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ICourseParticipantService ParticipantService
 @inject IUserService UserService
+@inject IAuthorizationHelper AuthorizationHelper
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject ILogger<MyCourses> Logger
@@ -132,6 +133,7 @@
     private int _tenantId;
     private int _userId;
     private int _staffId;
+    private bool _canViewCourseDetails;
 
     // QR dialog state
     private bool _qrDialogVisible = false;
@@ -161,6 +163,9 @@
 
         try
         {
+            var courseAccessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, HRMS.Core.Application.AppConstants.Modules.CourseManagement, _tenantId);
+            _canViewCourseDetails = courseAccessLevel > 0;
+
             var userEntity = await UserService.GetByIdAsync(_userId, _tenantId);
             if (userEntity?.StaffId.HasValue == true)
             {
@@ -282,10 +287,13 @@
                         Certificate
                     </MudButton>
                 }
-                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
-                           OnClick="@(() => Navigation.NavigateTo($"/tms/planning/view/{c.CoursePlanId}?from=my-courses"))">
-                    Details
-                </MudButton>
+                @if (_canViewCourseDetails)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                               OnClick="@(() => Navigation.NavigateTo($"/tms/planning/view/{c.CoursePlanId}?from=my-courses"))">
+                        Details
+                    </MudButton>
+                }
             </MudCardActions>
         </MudCard>
     };

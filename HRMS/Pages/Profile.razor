@@ -499,7 +499,7 @@
 
         _tenantId = int.Parse(tenantIdClaim);
         _userId = int.Parse(userIdClaim);
-        _isSuperAdmin = roleClaim == "Super Admin";
+        _isSuperAdmin = roleClaim == HRMS.Core.Application.AppConstants.Roles.SuperAdmin;
 
         // All users can edit their own profile (including Super Admin)
         _canEdit = true;

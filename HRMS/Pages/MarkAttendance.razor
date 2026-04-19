@@ -57,20 +57,6 @@
                 Date: @DateTime.Now.ToString("dd MMM yyyy") at @DateTime.Now.ToString("hh:mm tt")
             </MudText>
 
-            <MudDivider Class="my-4" />
-
-            <div class="d-flex gap-2 justify-center">
-                <MudButton Variant="Variant.Filled"
-                          Color="Color.Primary"
-                          OnClick="MarkAnother">
-                    Mark Another Attendance
-                </MudButton>
-                <MudButton Variant="Variant.Outlined"
-                          Color="Color.Primary"
-                          OnClick="ViewCoursePlan">
-                    View Course Details
-                </MudButton>
-            </div>
         </MudPaper>
     }
     else if (_autoMarking)

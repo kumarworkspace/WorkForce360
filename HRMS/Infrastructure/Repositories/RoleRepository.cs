@@ -14,7 +14,7 @@ public class RoleRepository : Repository<Role>, IRoleRepository
     public async Task<Role?> GetByIdAsync(int roleId, int tenantId)
     {
         return await _dbSet
-            .FirstOrDefaultAsync(r => r.RoleId == roleId && r.TenantId == tenantId);
+            .FirstOrDefaultAsync(r => r.RoleId == roleId && r.TenantId == tenantId && r.IsActive);
     }
 
     public async Task<IEnumerable<Role>> GetByTenantIdAsync(int tenantId, bool includeInactive = false)

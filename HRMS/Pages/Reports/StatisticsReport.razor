@@ -1,0 +1,315 @@
+@page "/tms/reports/statistics"
+@layout MainLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using HRMS.Core.Application.Interfaces
+@using HRMS.Core.Application.DTOs
+@using ClosedXML.Excel
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITMSReportService ReportService
+@inject IStaffService StaffService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@inject ILogger<StatisticsReport> Logger
+
+<PageTitle>Statistics Report</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-2 pa-0" />
+
+    <div class="mb-4">
+        <MudText Typo="Typo.h4" Style="font-weight:600; color:#1a237e;">Statistics Report</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Training analytics by department and course type</MudText>
+    </div>
+
+    <!-- Filters — auto-search on change -->
+    <MudPaper Elevation="1" Class="pa-4 mb-4" Style="border-radius:12px;">
+        <MudGrid Spacing="2" AlignItems="AlignItems.Center">
+            <MudItem xs="12" sm="6" md="3">
+                <MudTextField Value="_filter.Department" Label="Department"
+                              ValueChanged="@((string? v) => OnFilterChanged(() => _filter.Department = v))"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudTextField Value="_filter.Company" Label="Company"
+                              ValueChanged="@((string? v) => OnFilterChanged(() => _filter.Company = v))"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="int?" Label="Year" Value="_filter.Year"
+                           ValueChanged="@(v => OnFilterChanged(() => _filter.Year = v))"
+                           Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var y in _years)
+                    {
+                        <MudSelectItem T="int?" Value="(int?)y">@y</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex justify-end">
+                <MudButton Variant="Variant.Outlined" OnClick="ClearFilters" Size="Size.Small">Clear</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Class="mb-4" />
+    }
+    else
+    {
+        <!-- Summary Cards -->
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border-radius:12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h4" Style="font-weight:bold;">@_result.Summary.TotalSessions</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity:.9;">Total Sessions</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.EventNote" Size="Size.Large" Style="opacity:.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg,#f093fb,#f5576c);color:white;border-radius:12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h4" Style="font-weight:bold;">@_result.Summary.TotalEnrolled</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity:.9;">Total Enrolled</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Large" Style="opacity:.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg,#4facfe,#00f2fe);color:white;border-radius:12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h4" Style="font-weight:bold;">@_result.Summary.TotalPresent</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity:.9;">Total Present</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Style="opacity:.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg,#43e97b,#38f9d7);color:white;border-radius:12px;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.h4" Style="font-weight:bold;">@_result.Summary.AttendancePct.ToString("0.##")%</MudText>
+                            <MudText Typo="Typo.body2" Style="opacity:.9;">Overall Attendance</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.BarChart" Size="Size.Large" Style="opacity:.8;" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Table -->
+        <MudPaper Elevation="2" Class="pa-4" Style="border-radius:12px;">
+            <div class="d-flex align-center justify-space-between mb-3">
+                <MudText Typo="Typo.h6" Style="font-weight:600;">Statistics Report</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Download"
+                           OnClick="ExportExcel" Disabled="@(!_result.Rows.Any())">
+                    Export Report
+                </MudButton>
+            </div>
+
+            @if (!_result.Rows.Any())
+            {
+                <MudAlert Severity="Severity.Info">No data found for the selected filters.</MudAlert>
+            }
+            else
+            {
+                <MudTable Items="_result.Rows" Hover="true" Dense="true" Striped="true"
+                          Elevation="0" FixedHeader="true" Height="500px">
+                    <HeaderContent>
+                        <MudTh Style="background:#e3f2fd;">S.No</MudTh>
+                        <MudTh Style="background:#e3f2fd;">Department / Station</MudTh>
+                        <MudTh Style="background:#e3f2fd;">Course Type</MudTh>
+                        <MudTh Style="background:#e3f2fd; text-align:right;">Total Sessions</MudTh>
+                        <MudTh Style="background:#e3f2fd; text-align:right;">Total Enrolled</MudTh>
+                        <MudTh Style="background:#e3f2fd; text-align:right;">Total Present</MudTh>
+                        <MudTh Style="background:#e3f2fd; text-align:right;">Attendance %</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.RowNo</MudTd>
+                        <MudTd><MudText Style="font-weight:500;">@context.Department</MudText></MudTd>
+                        <MudTd>
+                            <MudChip T="string" Size="Size.Small" Color="@GetTypeColor(context.CourseType)">
+                                @context.CourseType
+                            </MudChip>
+                        </MudTd>
+                        <MudTd Style="text-align:right;">@context.TotalSessions</MudTd>
+                        <MudTd Style="text-align:right;">@context.TotalEnrolled</MudTd>
+                        <MudTd Style="text-align:right;">@context.TotalPresent</MudTd>
+                        <MudTd Style="text-align:right;">
+                            <MudChip T="string" Size="Size.Small"
+                                     Color="@(context.AttendancePct >= 75 ? Color.Success : context.AttendancePct >= 50 ? Color.Warning : Color.Error)">
+                                @context.AttendancePct.ToString("0.##")%
+                            </MudChip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+
+                <!-- Pagination -->
+                <div class="d-flex align-center justify-space-between mt-3">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Showing @((_currentPage - 1) * _pageSize + 1)–@(Math.Min(_currentPage * _pageSize, (int)_result.TotalCount)) of @_result.TotalCount records
+                    </MudText>
+                    <MudPagination Count="@_totalPages" Selected="_currentPage"
+                                   SelectedChanged="OnPageChanged" Color="Color.Primary" />
+                </div>
+            }
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private int _tenantId;
+    private bool _loading = true;
+    private int _currentPage = 1;
+    private int _pageSize = 50;
+    private int _totalPages = 1;
+
+    private StatisticsFilter _filter = new();
+    private StatisticsResultDto _result = new();
+    private System.Threading.CancellationTokenSource? _debounce;
+
+    private static readonly List<int> _years =
+        Enumerable.Range(DateTime.Today.Year - 4, 5).OrderByDescending(y => y).ToList();
+
+    private readonly List<BreadcrumbItem> _breadcrumbs =
+    [
+        new("Home", "/dashboard", icon: Icons.Material.Filled.Home),
+        new("Reports", null, disabled: true),
+        new("Statistics Report", null, disabled: true)
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _tenantId = int.TryParse(auth.User.FindFirst("TenantId")?.Value, out var tid) ? tid : 0;
+        _filter.Year = DateTime.Today.Year;
+        await LoadReport();
+    }
+
+    private async Task OnFilterChanged(Action setter)
+    {
+        setter();
+        _currentPage = 1;
+        _debounce?.Cancel();
+        _debounce = new System.Threading.CancellationTokenSource();
+        var token = _debounce.Token;
+        try
+        {
+            await Task.Delay(400, token);
+            await LoadReport();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task LoadReport()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            _filter.TenantId   = _tenantId;
+            _filter.PageNumber = _currentPage;
+            _filter.PageSize   = _pageSize;
+
+            _result     = await ReportService.GetStatisticsReportAsync(_filter);
+            _totalPages = (int)Math.Ceiling(_result.TotalCount / (double)_pageSize);
+            if (_totalPages < 1) _totalPages = 1;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading Statistics Report");
+            Snackbar.Add("Failed to load report.", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _currentPage = page;
+        await LoadReport();
+    }
+
+    private async Task ClearFilters()
+    {
+        _filter      = new StatisticsFilter { Year = DateTime.Today.Year };
+        _currentPage = 1;
+        await LoadReport();
+    }
+
+    private Color GetTypeColor(string? type) => type?.ToLower() switch
+    {
+        "initial"   => Color.Info,
+        "recurrent" => Color.Warning,
+        _           => Color.Default
+    };
+
+    private async Task ExportExcel()
+    {
+        try
+        {
+            var exportFilter = new StatisticsFilter
+            {
+                TenantId   = _tenantId,
+                Department = _filter.Department,
+                Company    = _filter.Company,
+                Year       = _filter.Year,
+                PageNumber = 1,
+                PageSize   = 100000
+            };
+            var exportData = await ReportService.GetStatisticsReportAsync(exportFilter);
+
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("Statistics");
+
+            var headers = new[] { "S.No", "Department / Station", "Course Type", "Total Sessions", "Total Enrolled", "Total Present", "Attendance %" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var cell = ws.Cell(1, i + 1);
+                cell.Value = headers[i];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#1a237e");
+                cell.Style.Font.FontColor = XLColor.White;
+            }
+
+            ws.Cell(2, 1).Value = $"Sessions: {exportData.Summary.TotalSessions}  Enrolled: {exportData.Summary.TotalEnrolled}  Present: {exportData.Summary.TotalPresent}  Attendance: {exportData.Summary.AttendancePct:0.##}%";
+            ws.Range(2, 1, 2, headers.Length).Merge();
+            ws.Cell(2, 1).Style.Font.Italic = true;
+            ws.Cell(2, 1).Style.Fill.BackgroundColor = XLColor.LightYellow;
+
+            int row = 3;
+            foreach (var r in exportData.Rows)
+            {
+                ws.Cell(row, 1).Value = (int)r.RowNo;
+                ws.Cell(row, 2).Value = r.Department;
+                ws.Cell(row, 3).Value = r.CourseType;
+                ws.Cell(row, 4).Value = (long)r.TotalSessions;
+                ws.Cell(row, 5).Value = (long)r.TotalEnrolled;
+                ws.Cell(row, 6).Value = (long)r.TotalPresent;
+                ws.Cell(row, 7).Value = (double)r.AttendancePct;
+                row++;
+            }
+            ws.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBase64", base64,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"StatisticsReport_{DateTime.Today:yyyyMMdd}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting Statistics Report");
+            Snackbar.Add("Export failed.", Severity.Error);
+        }
+    }
+}

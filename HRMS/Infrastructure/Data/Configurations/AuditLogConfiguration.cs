@@ -20,6 +20,8 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(e => e.ActionType).IsRequired().HasMaxLength(100).HasColumnName("ActionType")
             .HasConversion<string>();
 
+        builder.Property(e => e.Module).HasMaxLength(200).HasColumnName("Module");
+        builder.Property(e => e.RecordId).HasColumnName("RecordId");
         builder.Property(e => e.Description).HasColumnName("Description");
         builder.Property(e => e.IPAddress).HasMaxLength(100).HasColumnName("IPAddress");
         builder.Property(e => e.IsActive).IsRequired().HasColumnName("IsActive").HasDefaultValue(true);

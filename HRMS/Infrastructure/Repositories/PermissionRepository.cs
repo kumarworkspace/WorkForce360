@@ -14,7 +14,7 @@ public class PermissionRepository : Repository<Permission>, IPermissionRepositor
     public async Task<Permission?> GetByIdAsync(int permissionId, int tenantId)
     {
         return await _dbSet
-            .FirstOrDefaultAsync(p => p.PermissionId == permissionId && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.PermissionId == permissionId && p.TenantId == tenantId && p.IsActive);
     }
 
     public async Task<IEnumerable<Permission>> GetByTenantIdAsync(int tenantId, bool includeInactive = false)
@@ -32,7 +32,7 @@ public class PermissionRepository : Repository<Permission>, IPermissionRepositor
     public async Task<Permission?> GetByModuleNameAsync(string moduleName, int tenantId)
     {
         return await _dbSet
-            .FirstOrDefaultAsync(p => p.ModuleName.ToLower() == moduleName.ToLower() && p.TenantId == tenantId);
+            .FirstOrDefaultAsync(p => p.ModuleName.ToLower() == moduleName.ToLower() && p.TenantId == tenantId && p.IsActive);
     }
 
     public async Task<bool> ModuleNameExistsAsync(string moduleName, int tenantId, int? excludePermissionId = null)

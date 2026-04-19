@@ -392,3 +392,61 @@ BEGIN
     ORDER BY ca."AttendanceDate";
 END;
 $$;
+
+-- =============================================
+-- Function: usp_GetAttendanceByCoursePlan
+-- Retrieves attendance records for a course plan with staff details.
+-- Used by the attendance grid for display and checkbox state.
+-- =============================================
+DROP FUNCTION IF EXISTS usp_GetAttendanceByCoursePlan(INT, INT);
+
+CREATE OR REPLACE FUNCTION usp_GetAttendanceByCoursePlan(
+    p_course_plan_id INT,
+    p_tenant_id      INT
+)
+RETURNS TABLE (
+    "AttendanceId"   INT,
+    "CoursePlanId"   INT,
+    "StaffId"        INT,
+    "StaffName"      VARCHAR,
+    "EmployeeCode"   VARCHAR,
+    "Department"     VARCHAR,
+    "Position"       VARCHAR,
+    "AttendanceDate" TIMESTAMP,
+    "IsPresent"      BOOLEAN,
+    "Remarks"        VARCHAR,
+    "TenantId"       INT,
+    "IsActive"       BOOLEAN,
+    "CreatedDate"    TIMESTAMP,
+    "CreatedBy"      INT,
+    "UpdatedDate"    TIMESTAMP,
+    "UpdatedBy"      INT
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ca."AttendanceId",
+        ca."CoursePlanId",
+        ca."StaffId",
+        s."Name"::VARCHAR          AS "StaffName",
+        s."EmployeeCode",
+        s."Department",
+        s."Position",
+        ca."AttendanceDate"::TIMESTAMP,
+        ca."IsPresent",
+        ca."Remarks",
+        ca."TenantId",
+        ca."IsActive",
+        ca."CreatedDate"::TIMESTAMP,
+        ca."CreatedBy",
+        ca."UpdatedDate"::TIMESTAMP,
+        ca."UpdatedBy"
+    FROM "CourseAttendance_DateWise" ca
+    INNER JOIN "Staff" s ON ca."StaffId" = s."StaffId"
+    WHERE ca."CoursePlanId" = p_course_plan_id
+      AND ca."TenantId"     = p_tenant_id
+      AND ca."IsActive"     = TRUE
+    ORDER BY ca."AttendanceDate" ASC, s."Name" ASC;
+END;
+$$;

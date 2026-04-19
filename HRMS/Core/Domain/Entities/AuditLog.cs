@@ -8,6 +8,8 @@ public class AuditLog
     public int TenantId { get; set; }
     public int? UserId { get; set; }
     public ActionType ActionType { get; set; }
+    public string? Module { get; set; }
+    public int? RecordId { get; set; }
     public string? Description { get; set; }
     public string? IPAddress { get; set; }
     public bool IsActive { get; set; } = true;

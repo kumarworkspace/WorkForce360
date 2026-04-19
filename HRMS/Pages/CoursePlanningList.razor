@@ -261,7 +261,6 @@
     private int _accessLevel = 0;
     private int? _createdBy;
     private int? _staffId;
-    private string _userRole = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -278,7 +277,6 @@
 
             var tenantIdClaim = user.FindFirst("TenantId")?.Value;
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
 
             if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
             {
@@ -288,12 +286,11 @@
 
             _tenantId = int.Parse(tenantIdClaim);
             _userId = int.Parse(userIdClaim);
-            _userRole = roleClaim ?? string.Empty;
 
             _accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Course Management", _tenantId);
 
-            // Role-based filtering
-            if (roleClaim != "Super Admin")
+            // Full Access (3) = see all; lower = own only
+            if (_accessLevel < 3)
             {
                 _createdBy = _userId;
 

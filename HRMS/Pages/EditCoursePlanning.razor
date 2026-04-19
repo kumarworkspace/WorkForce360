@@ -8,6 +8,7 @@
 @inject ICoursePlanningService CoursePlanningService
 @inject ICourseRegistrationService CourseService
 @inject IStaffService StaffService
+@inject IAuthorizationHelper AuthorizationHelper
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject ILogger<EditCoursePlanning> Logger
@@ -225,7 +226,6 @@
 
             var tenantIdClaim = user.FindFirst("TenantId")?.Value;
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var roleClaim = user.FindFirst(ClaimTypes.Role)?.Value;
 
             if (string.IsNullOrEmpty(tenantIdClaim) || string.IsNullOrEmpty(userIdClaim))
             {
@@ -236,8 +236,8 @@
             _tenantId = int.Parse(tenantIdClaim);
             _userId = int.Parse(userIdClaim);
 
-            // Role-based filtering
-            if (roleClaim != "Super Admin")
+            var accessLevel = await AuthorizationHelper.GetModuleAccessLevelAsync(_userId, "Course Management", _tenantId);
+            if (accessLevel < 3)
             {
                 _createdBy = _userId;
             }

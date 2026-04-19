@@ -75,14 +75,15 @@ public class UserService : IUserService
                 }
             }
 
-            // 4. Validate role
-            var validRoles = new[] { "Super Admin", "HR Admin", "Staff", "Trainer", "Manager", "IT Admin" };
-            if (!validRoles.Contains(request.Role))
+            // 4. Validate role against DB
+            var dbRoles = await _unitOfWork.Role.GetByTenantIdAsync(tenantId);
+            var validRoleNames = dbRoles.Where(r => r.IsActive).Select(r => r.RoleName).ToList();
+            if (!validRoleNames.Contains(request.Role))
             {
                 return new CreateUserResult
                 {
                     Success = false,
-                    Message = $"Invalid role. Must be one of: {string.Join(", ", validRoles)}"
+                    Message = $"Invalid role. Must be one of: {string.Join(", ", validRoleNames)}"
                 };
             }
 
@@ -149,26 +150,28 @@ public class UserService : IUserService
                 };
             }
 
-            // 7. Assign default Staff role permission
+            // 7. Assign the selected role to the user
             try
             {
                 var roles = await _unitOfWork.Role.GetByTenantIdAsync(tenantId);
-                var staffRole = roles.FirstOrDefault(r => r.RoleName == "Staff" && r.IsActive);
-                
-                if (staffRole != null)
+                var selectedRole = roles.FirstOrDefault(r => r.RoleName == request.Role && r.IsActive);
+
+                // Fallback to Staff if selected role not found
+                selectedRole ??= roles.FirstOrDefault(r => r.RoleName == "Staff" && r.IsActive);
+
+                if (selectedRole != null)
                 {
                     var assignRequest = new AssignUserRolesRequest
                     {
                         UserId = user.UserId,
-                        RoleIds = new List<int> { staffRole.RoleId }
+                        RoleIds = new List<int> { selectedRole.RoleId }
                     };
                     await _userRoleService.AssignRolesAsync(assignRequest, tenantId, adminUserId);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to assign default Staff role to user {UserId}. User created but role assignment failed.", user.UserId);
-                // Don't fail user creation if role assignment fails
+                _logger.LogWarning(ex, "Failed to assign role '{Role}' to user {UserId}. User created but role assignment failed.", request.Role, user.UserId);
             }
 
             _logger.LogInformation("User account created: {Email} (UserId: {UserId}) for staff {StaffId} by admin {AdminUserId}", 
@@ -414,20 +417,25 @@ public class UserService : IUserService
                 throw new InvalidOperationException("User not found or access denied.");
             }
 
-            // Validate email uniqueness (exclude current user)
-            if (await EmailExistsAsync(request.Email, tenantId, request.UserId))
+            var trimmedEmail = (request.Email ?? user.Email).Trim();
+
+            // Only validate email uniqueness if the email has actually changed
+            if (!string.Equals(user.Email?.Trim(), trimmedEmail, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException($"Email '{request.Email}' already exists for another user.");
+                if (await EmailExistsAsync(trimmedEmail, tenantId, request.UserId))
+                    throw new InvalidOperationException($"Email '{trimmedEmail}' already exists for another user.");
             }
 
-            // Validate role
-            var validRoles = new[] { "Super Admin", "HR Admin", "Staff", "Trainer", "Manager", "IT Admin" };
-            if (!validRoles.Contains(request.Role))
+            // Validate role against DB
+            var dbRoles = await _unitOfWork.Role.GetByTenantIdAsync(tenantId);
+            var validRoleNames = dbRoles.Where(r => r.IsActive).Select(r => r.RoleName).ToList();
+            if (!validRoleNames.Contains(request.Role))
             {
-                throw new InvalidOperationException($"Invalid role. Must be one of: {string.Join(", ", validRoles)}");
+                throw new InvalidOperationException($"Invalid role. Must be one of: {string.Join(", ", validRoleNames)}");
             }
 
-            user.Email = request.Email;
+            var oldRole = user.Role;
+            user.Email = trimmedEmail;
             user.Role = request.Role;
             user.IsActive = request.IsActive;
             user.UpdatedBy = adminUserId;
@@ -436,9 +444,31 @@ public class UserService : IUserService
             await _unitOfWork.User.UpdateAsync(user);
             await _unitOfWork.SaveChangesAsync();
 
+            // Sync UserRoles table when role changes
+            if (!string.Equals(oldRole, request.Role, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var newRole = dbRoles.FirstOrDefault(r => r.RoleName == request.Role && r.IsActive);
+                    if (newRole != null)
+                    {
+                        var assignRequest = new AssignUserRolesRequest
+                        {
+                            UserId = user.UserId,
+                            RoleIds = new List<int> { newRole.RoleId }
+                        };
+                        await _userRoleService.AssignRolesAsync(assignRequest, tenantId, adminUserId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to sync UserRoles for user {UserId} to role '{Role}'", user.UserId, request.Role);
+                }
+            }
+
             // Log audit
             await LogAuditAsync(tenantId, adminUserId, user.UserId, ActionType.Update,
-                $"Updated user account (ID: {user.UserId}, Email: {user.Email}, Role: {user.Role})", ipAddress);
+                $"Updated user account (ID: {user.UserId}, Email: {user.Email}, Role changed: {oldRole} → {user.Role})", ipAddress);
 
             return true;
         }
@@ -476,6 +506,38 @@ public class UserService : IUserService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting user: {UserId} for tenant: {TenantId}", userId, tenantId);
+            throw;
+        }
+    }
+
+    public async Task<bool> ChangePasswordAsync(int userId, string newPassword, int tenantId, int adminUserId, string? ipAddress = null)
+    {
+        try
+        {
+            var user = await _unitOfWork.User.GetByIdAsync(userId);
+            if (user == null || user.TenantId != tenantId || !user.IsActive)
+                throw new InvalidOperationException("User not found or access denied.");
+
+            if (!PasswordRegex.IsMatch(newPassword))
+                throw new InvalidOperationException("Password must be at least 8 characters and contain uppercase, lowercase, number, and special character (@$!%*?&).");
+
+            user.PasswordHash = _passwordHasher.HashPassword(newPassword);
+            user.FailedLoginAttempts = 0;
+            user.IsLocked = false;
+            user.UpdatedBy = adminUserId;
+            user.UpdatedDate = DateTime.UtcNow;
+
+            await _unitOfWork.User.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            await LogAuditAsync(tenantId, adminUserId, user.UserId, ActionType.Update,
+                $"Password changed for user (ID: {user.UserId}, Email: {user.Email})", ipAddress);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error changing password for user: {UserId} in tenant: {TenantId}", userId, tenantId);
             throw;
         }
     }

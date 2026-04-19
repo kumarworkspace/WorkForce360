@@ -20,7 +20,8 @@ public class SeedingService : ISeedingService
         "Leave Approval",        // /hrms/leave/approval
         "Leave Configuration",   // /hrms/leave/types, /hrms/leave/holidays
         "My Training",           // /tms/my-courses
-        "Course Management",     // /tms/courses, /tms/planning, /tms/attendance, /tms/dashboard, /tms/reports
+        "Course Management",     // /tms/courses, /tms/planning, /tms/attendance, /tms/dashboard
+        "TMS Reports",           // /tms/reports/general, /tms/reports/trainer-kpi, /tms/reports/statistics
         "Role Management",       // /admin/users, /admin/roles
         "Access Control",        // /admin/access-control, /admin/user-roles
         "Audit Logs",            // /admin/audit-logs
@@ -43,6 +44,7 @@ public class SeedingService : ISeedingService
                 { "Leave Configuration",  3 },
                 { "My Training",          1 },
                 { "Course Management",    2 },
+                { "TMS Reports",          3 },
                 { "Role Management",      2 },
                 { "Access Control",       0 },
                 { "Audit Logs",           1 },
@@ -55,6 +57,7 @@ public class SeedingService : ISeedingService
                 { "Leave Configuration",  0 },
                 { "My Training",          1 },
                 { "Course Management",    0 },
+                { "TMS Reports",          1 },
                 { "Role Management",      0 },
                 { "Access Control",       0 },
                 { "Audit Logs",           0 },
@@ -67,6 +70,7 @@ public class SeedingService : ISeedingService
                 { "Leave Configuration",  0 },
                 { "My Training",          1 },
                 { "Course Management",    3 },
+                { "TMS Reports",          2 },
                 { "Role Management",      0 },
                 { "Access Control",       0 },
                 { "Audit Logs",           0 },
@@ -79,6 +83,7 @@ public class SeedingService : ISeedingService
                 { "Leave Configuration",  0 },
                 { "My Training",          1 },
                 { "Course Management",    0 },
+                { "TMS Reports",          0 },
                 { "Role Management",      0 },
                 { "Access Control",       0 },
                 { "Audit Logs",           0 },
